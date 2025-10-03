@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Operations Dashboard</title>
+    <title>Account Operations Dashboard (Public Data)</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Use Inter font family -->
@@ -29,14 +29,6 @@
         }
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8; /* slate-400 */
-        }
-        /* Style for the fixed elements to ensure they stand out as non-editable */
-        .fixed-field {
-            background-color: #f1f5f9; /* slate-100 */
-            color: #475569; /* slate-600 */
-            border-radius: 0.5rem;
-            padding: 0.75rem;
-            font-weight: 500;
         }
         /* Style the loading screen */
         #loading-overlay {
@@ -75,14 +67,14 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p class="mt-2 text-indigo-600">Loading accounts...</p>
+            <p class="mt-2 text-indigo-600">Connecting to data...</p>
         </div>
     </div>
 
     <!-- Main Content Card -->
     <div id="app-container" class="max-w-4xl mx-auto bg-white shadow-2xl rounded-xl p-6 sm:p-10 transform transition-all duration-300 scale-100 opacity-0 hidden">
         <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Account Operations Dashboard</h1>
-        <p class="text-gray-500 mb-8">Manage both the fixed identity details and the dynamic operational details for your accounts.</p>
+        <p class="text-gray-500 mb-8">This dashboard uses **public data storage**. All users see and manage the same list of accounts.</p>
 
         <!-- Notification Bars -->
         <div id="notification-box" class="hidden p-4 mb-4 rounded-lg text-sm text-green-700 bg-green-100" role="alert">
@@ -92,23 +84,7 @@
             <span class="font-medium">Error!</span> Something went wrong. Check console for details.
         </div>
 
-        <!-- Section 1: Fixed/Read-Only Information -->
-        <div class="mb-10 p-4 bg-indigo-50 rounded-xl shadow-inner grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Your Unique User ID</label>
-                <div id="display-user-id" class="fixed-field overflow-x-auto text-sm">
-                    <!-- User ID will be inserted here -->
-                </div>
-            </div>
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Account Created On</label>
-                <div id="display-created-at" class="fixed-field text-sm">
-                    <!-- Creation Date will be inserted here -->
-                </div>
-            </div>
-        </div>
-
-        <!-- Section 2: Account List and Add Button -->
+        <!-- Section: Account List and Add Button -->
         <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex justify-between items-center">
             My Accounts
             <button onclick="openAccountModal('new')" class="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
@@ -211,36 +187,26 @@
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, getDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase instances
         let app, db, auth;
-        let userId = 'loading';
         let currentAccounts = {}; 
-        const PROFILE_COLLECTION = 'user_data';
-        const PROFILE_DOC_ID = 'user_profile';
-
-        // --- START: CANVAS ENVIRONMENT CONFIGURATION ---
-        // Define a safe fallback configuration based on the user's previously provided details
-        const userProvidedConfig = {
-            apiKey: "AIzaSyCbsageWK7FXsuYE1XqRw8a5LdQi0u3myo",
-            authDomain: "first-3b0e2.firebaseapp.com",
-            projectId: "first-3b0e2",
-            storageBucket: "first-3b0e2.firebasestorage.app",
-            messagingSenderId: "167332139493",
-            appId: "1:167332139493:web:fb85490865854ed238df0c"
-        };
         
-        // Use environment variables provided by the Canvas, falling back to user's hardcoded config if not available.
-        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : JSON.stringify(userProvidedConfig);
+        // --- PUBLIC DATA CONFIGURATION ---
+        // Using a fixed path for public, shared data: artifacts/{appId}/public/data/app_state/dashboard_data
+        const PUBLIC_COLLECTION = 'app_state';
+        const PUBLIC_DOC_ID = 'dashboard_data';
+
+        // --- CANVAS ENVIRONMENT CONFIGURATION ---
+        // Fallback config is needed if environment variables are somehow missing,
+        // though Firebase config is usually provided correctly.
+        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
         const firebaseConfig = JSON.parse(firebaseConfigString);
-
-        // Fallback to project ID if __app_id is not set.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
         
-        // Use the initial auth token for authentication, falling back to null if not provided.
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // Use the application ID provided by the environment.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId || 'default-app-id';
         // --- END: CANVAS ENVIRONMENT CONFIGURATION ---
         
         // Utility elements
@@ -321,8 +287,7 @@
         }
 
         /**
-         * Initializes Firebase and authenticates the user.
-         * IMPORTANT FIX: Ensures setupProfileListener is called ONLY after user is authenticated.
+         * Initializes Firebase (using Anonymous Auth for Firestore access) and sets up the listener.
          */
         async function initializeAppAndAuth() {
             console.log('--- INITIALIZING APP AND AUTH ---');
@@ -337,35 +302,11 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // 1. Force the sign-in to complete synchronously (using initialAuthToken or Anonymous Auth)
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
-
-                // 2. After sign-in, the user object is guaranteed to exist.
-                const user = auth.currentUser; 
+                // Sign in anonymously to gain a user object for Firestore rules compliance.
+                await signInAnonymously(auth);
+                console.log('AUTH SUCCESS: Signed in anonymously.');
                 
-                if (user) {
-                    userId = user.uid;
-                    document.getElementById('display-user-id').textContent = userId;
-                    console.log('AUTH SUCCESS: User ID set to:', userId);
-                    
-                    // 3. Immediately set up the listener now that we have the definite userId
-                    setupProfileListener(); 
-                } else {
-                    console.error("Authentication failed: No user object found after sign-in attempt.");
-                }
-
-                // Listener for subsequent auth changes (unlikely for anonymous user, but good practice)
-                onAuthStateChanged(auth, (latestUser) => {
-                    if (latestUser && latestUser.uid !== userId) {
-                        userId = latestUser.uid;
-                        document.getElementById('display-user-id').textContent = userId;
-                    }
-                });
-
+                setupPublicDataListener(); 
 
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Error:", error);
@@ -375,17 +316,17 @@
         }
 
         /**
-         * Sets up the real-time listener for the user's profile data.
+         * Sets up the real-time listener for the public, shared data document.
          */
-        function setupProfileListener() {
-            if (!db || !userId) {
-                console.error("LISTENER FAIL: DB or UserId not ready.");
+        function setupPublicDataListener() {
+            if (!db) {
+                console.error("LISTENER FAIL: DB not ready.");
                 return;
             }
-            console.log('LISTENER: Setting up snapshot listener for user:', userId);
+            console.log('LISTENER: Setting up snapshot listener for public data.');
 
-            // Path: artifacts/{appId}/users/{userId}/user_data/user_profile
-            const docRef = doc(db, `artifacts/${appId}/users/${userId}/${PROFILE_COLLECTION}`, PROFILE_DOC_ID);
+            // Path: artifacts/{appId}/public/data/app_state/dashboard_data
+            const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
             onSnapshot(docRef, async (docSnap) => {
                 console.log('LISTENER EVENT: Snapshot received.');
@@ -393,35 +334,27 @@
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     
-                    // Update system fixed fields
-                    if (data.createdAt && data.createdAt.toDate) {
-                        const date = data.createdAt.toDate().toLocaleString();
-                        document.getElementById('display-created-at').textContent = date;
-                    } else {
-                        document.getElementById('display-created-at').textContent = 'Date not yet set (Will set on first save)';
-                    }
-                    
                     // Update dynamic accounts list
-                    currentAccounts = data.accounts || {};
+                    // Ensure 'accounts' property exists and is an object
+                    currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
                     
-                    console.log(`LISTENER SUCCESS: Profile data updated. Found ${Object.keys(currentAccounts).length} accounts.`);
+                    console.log(`LISTENER SUCCESS: Data updated. Found ${Object.keys(currentAccounts).length} accounts.`);
                     
-                    // Call render function
                     renderAccounts(currentAccounts); 
 
                 } else {
                     currentAccounts = {};
                     renderAccounts({});
                     
-                    // Pre-fill date when starting fresh
+                    // Set default date when starting fresh
                     modalDate.value = new Date().toISOString().substring(0, 10); 
                     
-                    console.log("LISTENER INFO: No profile document found. Starting fresh.");
+                    console.log("LISTENER INFO: No data document found. Starting fresh.");
                 }
 
                 hideLoading();
             }, (error) => {
-                console.error("Error listening to profile document:", error);
+                console.error("Error listening to public data document:", error);
                 showNotification('error', `Real-time data error: ${error.message}`);
                 hideLoading();
             });
@@ -436,11 +369,8 @@
             accountsContainer.innerHTML = '';
             const accountKeys = Object.keys(accountsMap);
 
-            console.log(`RENDER: Found ${accountKeys.length} accounts to display.`);
-
             if (accountKeys.length === 0) {
                 noAccountsMessage.classList.remove('hidden');
-                console.log('RENDER: No accounts found. Showing message.');
                 return;
             }
             noAccountsMessage.classList.add('hidden');
@@ -510,8 +440,6 @@
                 `;
                 accountsContainer.appendChild(card);
             });
-            console.log(`RENDER: Successfully appended ${accountKeys.length} cards.`);
-            console.log('--- FINISHED RENDER ACCOUNTS ---');
         }
 
         /**
@@ -525,7 +453,7 @@
 
             modalAccountId.value = id;
             
-            // Clear all fields
+            // Clear or set default fields
             modalName.value = '';
             modalFastagId.value = '';
             modalCarNumber.value = '';
@@ -574,7 +502,7 @@
          * Saves the account data from the modal to Firestore.
          */
         window.saveAccountFromModal = async function() {
-            if (!db || !userId) {
+            if (!db) {
                 showNotification('error', "Database connection not ready.");
                 return;
             }
@@ -612,7 +540,7 @@
                 [accountId]: newAccountData
             };
 
-            await updateFirestoreProfile({ accounts: updatedAccounts }, isNew ? 'Account Added' : 'Account Updated');
+            await updateFirestoreData({ accounts: updatedAccounts }, isNew ? 'Account Added' : 'Account Updated');
             closeAccountModal();
         }
 
@@ -620,7 +548,7 @@
          * Deletes an account and updates Firestore.
          */
         window.deleteAccount = async function(id) {
-            if (!db || !userId) {
+            if (!db) {
                 showNotification('error', "Database connection not ready.");
                 return;
             }
@@ -635,16 +563,16 @@
             const updatedAccounts = { ...currentAccounts };
             delete updatedAccounts[id];
 
-            await updateFirestoreProfile({ accounts: updatedAccounts }, 'Account Deleted');
+            await updateFirestoreData({ accounts: updatedAccounts }, 'Account Deleted');
         }
 
 
         /**
-         * Generic function to update the user's main profile document.
+         * Generic function to update the main public data document.
          */
-        async function updateFirestoreProfile(updateData, successMessage) {
-            // Path: artifacts/{appId}/users/{userId}/user_data/user_profile
-            const docRef = doc(db, `artifacts/${appId}/users/${userId}/${PROFILE_COLLECTION}`, PROFILE_DOC_ID);
+        async function updateFirestoreData(updateData, successMessage) {
+            // Path: artifacts/{appId}/public/data/app_state/dashboard_data
+            const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
             try {
                 // Prepare the base update object
@@ -657,7 +585,6 @@
                 const docSnap = await getDoc(docRef);
                 if (!docSnap.exists()) {
                     finalUpdate.createdAt = serverTimestamp();
-                    finalUpdate.userId = userId;
                 }
 
                 await setDoc(docRef, finalUpdate, { merge: true });
@@ -665,7 +592,7 @@
                 return true;
 
             } catch (error) {
-                console.error("Error saving profile:", error);
+                console.error("Error saving data:", error);
                 showNotification('error', `Failed to save changes: ${error.message}`);
                 return false;
             }
