@@ -221,24 +221,28 @@
         const PROFILE_COLLECTION = 'user_data';
         const PROFILE_DOC_ID = 'user_profile';
 
-        // --- START: MANUAL CONFIGURATION FOR EXTERNAL SERVER ---
-// PASTE YOUR ENTIRE FIREBASE CONFIG OBJECT HERE (Do not change const name)
-const YOUR_FIREBASE_CONFIG = {
-    apiKey: "AIzaSyCbsageWK7FXsuYE1XqRw8a5LdQi0u3myo",
-    authDomain: "first-3b0e2.firebaseapp.com",
-    projectId: "first-3b0e2",
-    storageBucket: "first-3b0e2.firebasestorage.app",
-    messagingSenderId: "167332139493",
-    appId: "1:167332139493:web:fb85490865854ed238df0c"
-};
+        // --- START: CANVAS ENVIRONMENT CONFIGURATION ---
+        // Define a safe fallback configuration based on the user's previously provided details
+        const userProvidedConfig = {
+            apiKey: "AIzaSyCbsageWK7FXsuYE1XqRw8a5LdQi0u3myo",
+            authDomain: "first-3b0e2.firebaseapp.com",
+            projectId: "first-3b0e2",
+            storageBucket: "first-3b0e2.firebasestorage.app",
+            messagingSenderId: "167332139493",
+            appId: "1:167332139493:web:fb85490865854ed238df0c"
+        };
+        
+        // Use environment variables provided by the Canvas, falling back to user's hardcoded config if not available.
+        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : JSON.stringify(userProvidedConfig);
+        const firebaseConfig = JSON.parse(firebaseConfigString);
 
-// Use the copied config directly to set up the app environment
-const appId = YOUR_FIREBASE_CONFIG.projectId; 
-const firebaseConfig = YOUR_FIREBASE_CONFIG;
-const initialAuthToken = null; // Forces the script to use anonymous sign-in
-
-// --- END: MANUAL CONFIGURATION FOR EXTERNAL SERVER ---
-
+        // Fallback to project ID if __app_id is not set.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+        
+        // Use the initial auth token for authentication, falling back to null if not provided.
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // --- END: CANVAS ENVIRONMENT CONFIGURATION ---
+        
         // Utility elements
         const loadingOverlay = document.getElementById('loading-overlay');
         const appContainer = document.getElementById('app-container');
@@ -277,7 +281,7 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
          */
         function formatCurrency(amount) {
             const num = parseFloat(amount);
-            if (isNaN(num) || num === null) return 'N/A';
+            if (isNaN(num) || num === null || num === undefined) return 'N/A';
             return num.toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
         }
 
@@ -318,15 +322,13 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
 
         /**
          * Initializes Firebase and authenticates the user.
-         */
-        /**
-         * Initializes Firebase and authenticates the user.
-         * FIX: Ensures setupProfileListener is called ONLY after user is authenticated.
+         * IMPORTANT FIX: Ensures setupProfileListener is called ONLY after user is authenticated.
          */
         async function initializeAppAndAuth() {
+            console.log('--- INITIALIZING APP AND AUTH ---');
             try {
-                if (Object.keys(firebaseConfig).length === 0) {
-                    console.error("Firebase config is missing. Cannot initialize Firestore.");
+                if (!firebaseConfig.projectId) {
+                    console.error("Firebase config is incomplete. Cannot initialize Firestore.");
                     hideLoading();
                     return;
                 }
@@ -334,8 +336,8 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-
-                // 1. Force the sign-in to complete synchronously (Anonymous Sign-in)
+                
+                // 1. Force the sign-in to complete synchronously (using initialAuthToken or Anonymous Auth)
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
@@ -348,6 +350,7 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
                 if (user) {
                     userId = user.uid;
                     document.getElementById('display-user-id').textContent = userId;
+                    console.log('AUTH SUCCESS: User ID set to:', userId);
                     
                     // 3. Immediately set up the listener now that we have the definite userId
                     setupProfileListener(); 
@@ -355,13 +358,14 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
                     console.error("Authentication failed: No user object found after sign-in attempt.");
                 }
 
-                // Keep the listener for potential future auth changes, but the main setup is done above.
+                // Listener for subsequent auth changes (unlikely for anonymous user, but good practice)
                 onAuthStateChanged(auth, (latestUser) => {
                     if (latestUser && latestUser.uid !== userId) {
                         userId = latestUser.uid;
                         document.getElementById('display-user-id').textContent = userId;
                     }
                 });
+
 
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Error:", error);
@@ -374,11 +378,18 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
          * Sets up the real-time listener for the user's profile data.
          */
         function setupProfileListener() {
-            if (!db || !userId) return;
+            if (!db || !userId) {
+                console.error("LISTENER FAIL: DB or UserId not ready.");
+                return;
+            }
+            console.log('LISTENER: Setting up snapshot listener for user:', userId);
 
+            // Path: artifacts/{appId}/users/{userId}/user_data/user_profile
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/${PROFILE_COLLECTION}`, PROFILE_DOC_ID);
 
             onSnapshot(docRef, async (docSnap) => {
+                console.log('LISTENER EVENT: Snapshot received.');
+
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     
@@ -392,9 +403,12 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
                     
                     // Update dynamic accounts list
                     currentAccounts = data.accounts || {};
-                    renderAccounts(currentAccounts);
+                    
+                    console.log(`LISTENER SUCCESS: Profile data updated. Found ${Object.keys(currentAccounts).length} accounts.`);
+                    
+                    // Call render function
+                    renderAccounts(currentAccounts); 
 
-                    console.log("Profile data updated from Firestore. Accounts:", Object.keys(currentAccounts).length);
                 } else {
                     currentAccounts = {};
                     renderAccounts({});
@@ -402,7 +416,7 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
                     // Pre-fill date when starting fresh
                     modalDate.value = new Date().toISOString().substring(0, 10); 
                     
-                    console.log("No profile document found. Starting fresh.");
+                    console.log("LISTENER INFO: No profile document found. Starting fresh.");
                 }
 
                 hideLoading();
@@ -418,11 +432,15 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
          * @param {object} accountsMap Map of account objects keyed by ID.
          */
         function renderAccounts(accountsMap) {
+            console.log('--- STARTING RENDER ACCOUNTS ---');
             accountsContainer.innerHTML = '';
             const accountKeys = Object.keys(accountsMap);
 
+            console.log(`RENDER: Found ${accountKeys.length} accounts to display.`);
+
             if (accountKeys.length === 0) {
                 noAccountsMessage.classList.remove('hidden');
+                console.log('RENDER: No accounts found. Showing message.');
                 return;
             }
             noAccountsMessage.classList.add('hidden');
@@ -492,11 +510,12 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
                 `;
                 accountsContainer.appendChild(card);
             });
+            console.log(`RENDER: Successfully appended ${accountKeys.length} cards.`);
+            console.log('--- FINISHED RENDER ACCOUNTS ---');
         }
 
         /**
          * Opens the modal for adding a new account or editing an existing one.
-         * @param {string} id Unique ID of the account to edit, or 'new' for a new account.
          */
         window.openAccountModal = function(id) {
             modalBackdrop.style.display = 'flex';
@@ -564,8 +583,8 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
             const accountId = isNew ? crypto.randomUUID() : modalAccountId.value;
 
             // Ensure amount collection and loaded by are saved as numbers or null for clean data
-            const amountCollection = parseFloat(modalAmountCollection.value.trim());
-            const accountLoadedBy = parseFloat(modalAccountLoadedBy.value.trim());
+            const amountCollection = modalAmountCollection.value.trim() !== '' ? parseFloat(modalAmountCollection.value.trim()) : null;
+            const accountLoadedBy = modalAccountLoadedBy.value.trim() !== '' ? parseFloat(modalAccountLoadedBy.value.trim()) : null;
 
 
             const newAccountData = {
@@ -577,9 +596,9 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
 
                 // Changeable/Operational Details
                 date: modalDate.value,
-                todayAmountCollection: isNaN(amountCollection) ? null : amountCollection,
+                todayAmountCollection: amountCollection,
                 cashoutStatus: modalCashoutStatus.value,
-                accountLoadedByUser: isNaN(accountLoadedBy) ? null : accountLoadedBy,
+                accountLoadedByUser: accountLoadedBy,
             };
 
             if (!newAccountData.name) {
@@ -599,7 +618,6 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
 
         /**
          * Deletes an account and updates Firestore.
-         * @param {string} id Unique ID of the account to delete.
          */
         window.deleteAccount = async function(id) {
             if (!db || !userId) {
@@ -623,10 +641,9 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
 
         /**
          * Generic function to update the user's main profile document.
-         * @param {object} updateData Data object to merge into the profile document.
-         * @param {string} successMessage Message to display on successful update.
          */
         async function updateFirestoreProfile(updateData, successMessage) {
+            // Path: artifacts/{appId}/users/{userId}/user_data/user_profile
             const docRef = doc(db, `artifacts/${appId}/users/${userId}/${PROFILE_COLLECTION}`, PROFILE_DOC_ID);
 
             try {
