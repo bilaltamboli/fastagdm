@@ -153,7 +153,7 @@
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // Removed: getAuth, signInAnonymously
         import { getFirestore, doc, setDoc, onSnapshot, getDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------------------
@@ -166,17 +166,17 @@
             projectId: "first-3b0e2",
             storageBucket: "first-3b0e2.firebasestorage.app",
             messagingSenderId: "167332139493",
-            appId: "1:167332139493:web:fb85490865854ed238df0c"
+            appId: "1:167332139493:web:fb854908654ed238df0c"
         };
         // ----------------------------------------------------------------------------------
 
         // Global Firebase instances and state
-        let db;
+        let db; 
         let currentAccounts = {}; 
         let isDbReady = false; 
         
         // --- PUBLIC DATA CONFIGURATION ---
-        // The appId for path construction is derived from the hardcoded config's projectId.
+        // The projectId is used for the public data path construction.
         const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
         const PUBLIC_COLLECTION_PATH = 'app_state';
         const PUBLIC_DOC_ID = 'status_data'; 
@@ -218,24 +218,21 @@
         }
 
         /**
-         * Initializes Firebase and sets up the listener using the Public Path.
+         * Initializes Firebase Firestore (only) and sets up the listener.
          */
-        async function initializeAppAndAuth() {
+        async function initializeFirestoreOnly() {
             try {
-                // 1. Initialize Firebase services using the hardcoded config
+                // 1. Initialize Firebase App
                 const app = initializeApp(firebaseConfig); 
+                
+                // 2. Initialize Firestore
                 db = getFirestore(app);
                 
-                // 2. Sign in Anonymously (assuming your rules allow public read/write)
-                const auth = getAuth(app);
-                await signInAnonymously(auth);
-                console.log("DEBUG: Signed in Anonymously. Data access is public via security rules.");
-                
-                // 3. Setup Firestore listener using the Project ID for the storage path
+                // 3. Setup Firestore listener for public data
                 setupPublicDataListener(FIREBASE_PROJECT_ID);
 
             } catch (error) {
-                console.error("Firebase Initialization or Authentication Error:", error);
+                console.error("Firebase Initialization Error:", error);
                 // Display the raw error message to the user
                 showNotification('error', `Setup error: ${error.message}. Connection failed.`);
                 hideLoading();
@@ -257,6 +254,7 @@
                     // Load or initialize accounts from the document
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
                 } else {
+                    // Initialize the document structure if it doesn't exist
                     currentAccounts = {};
                 }
 
@@ -274,7 +272,7 @@
          */
         window.handleStatusUpdate = async function(accountId, field, value) {
             if (!db || !isDbReady) {
-                showNotification('error', "Database not ready.");
+                showNotification('error', "Database not ready. Please wait.");
                 return;
             }
             
@@ -288,7 +286,7 @@
                 [accountId]: updatedAccount
             };
             
-            await updateFirestoreData({ accounts: updatedAccounts }, `Status updated to ${value}.`);
+            await updateFirestoreData({ accounts: updatedAccounts }, 'Status updated.');
         }
 
 
@@ -320,6 +318,8 @@
                 // Determine color for the status pill based on current status
                 const todaysStatusColor = account.todaysStatus === 'Completed' ? 'bg-status-completed' : 'bg-status-pending';
                 const cashoutStatusColor = account.cashoutStatus === 'Completed' ? 'bg-status-completed' : 'bg-status-pending';
+                const adminAssignedColor = account.adminUser ? 'bg-status-admin' : 'bg-gray-400';
+
 
                 card.className = 'bg-white border border-gray-200 rounded-xl shadow-lg p-5 hover:shadow-xl transition duration-300 space-y-4 fade-in';
                 card.innerHTML = `
@@ -372,7 +372,10 @@
 
                         <!-- Admin -->
                         <div>
-                            <label class="block text-xs font-medium text-gray-500 mb-1">Assigned Admin</label>
+                            <label class="block text-xs font-medium text-gray-500 mb-1 flex justify-between items-center">
+                                Assigned Admin
+                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold text-white ${adminAssignedColor}">${account.adminUser || 'Unassigned'}</span>
+                            </label>
                             <select id="admin-${id}" class="status-select w-full" 
                                 onchange="handleStatusUpdate('${id}', 'adminUser', this.value)">
                                 <option value="" ${account.adminUser === '' || account.adminUser === undefined ? 'selected' : ''} disabled>Select Admin</option>
@@ -413,7 +416,7 @@
 
             } catch (error) {
                 console.error("Error saving data:", error);
-                showNotification('error', `Failed to save changes: ${error.message}. Check Rules/Config.`);
+                showNotification('error', `Failed to save changes: ${error.message}. Please check your Firebase project rules and configuration.`);
                 return false;
             }
         }
@@ -421,7 +424,7 @@
         // --- Modal Logic ---
 
         window.openAccountModal = function(id) {
-            if (!isDbReady) return showNotification('error', "Database connection not ready.");
+            if (!isDbReady) return showNotification('error', "Database connection not ready. Please wait.");
             
             const modalBackdrop = document.getElementById('account-modal-backdrop');
             const modalElement = document.getElementById('account-modal');
@@ -467,7 +470,7 @@
         }
 
         window.saveAccountFromModal = async function() {
-            if (!isDbReady) return showNotification('error', "Database not ready.");
+            if (!isDbReady) return showNotification('error', "Database not ready. Please wait.");
 
             const modalAccountId = document.getElementById('modal-account-id');
             const modalName = document.getElementById('modal-name');
@@ -478,6 +481,7 @@
             const isNew = modalAccountId.value === 'new';
             const accountId = isNew ? crypto.randomUUID() : modalAccountId.value;
 
+            // Preserve existing status fields if updating an existing account
             const baseAccountData = currentAccounts[accountId] || {
                 todaysStatus: 'Pending',
                 cashoutStatus: 'Pending',
@@ -507,33 +511,21 @@
         }
 
         window.deleteAccount = async function(id) {
-            if (!isDbReady) return showNotification('error', "Database not ready.");
+            if (!isDbReady) return showNotification('error', "Database not ready. Please wait.");
             
             if (!currentAccounts[id]) return showNotification('error', 'Account not found.');
 
-            // Use a custom confirmation modal instead of alert/confirm
-            const shouldDelete = window.confirm(`Are you sure you want to delete the account: "${currentAccounts[id].name}"?`);
-            if (!shouldDelete) return;
+            // Use custom confirmation instead of alert/confirm
+            if (window.confirm(`Are you sure you want to delete the account: "${currentAccounts[id].name}"?`)) {
+                const updatedAccounts = { ...currentAccounts };
+                delete updatedAccounts[id];
 
-
-            const updatedAccounts = { ...currentAccounts };
-            delete updatedAccounts[id];
-
-            await updateFirestoreData({ accounts: updatedAccounts }, 'Account Deleted');
-        }
-        
-        // Custom window.confirm implementation to satisfy environment constraints
-        // NOTE: This uses the built-in browser confirmation for simplicity in standalone mode.
-        // In the Canvas environment, this would be replaced by a custom UI modal.
-        if (typeof window.confirm === 'undefined') {
-            window.confirm = (message) => {
-                console.warn("Using fallback confirm: ", message);
-                return true; // Assume confirmation if running in a restrictive environment
+                await updateFirestoreData({ accounts: updatedAccounts }, 'Account Deleted');
             }
         }
-
-        // Start the application
-        initializeAppAndAuth();
+        
+        // Start the application by only initializing Firestore
+        initializeFirestoreOnly();
     </script>
 </body>
 </html>
