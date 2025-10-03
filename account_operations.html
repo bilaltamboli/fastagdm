@@ -251,45 +251,51 @@
 
         /**
          * Initializes Firebase (using Custom Token or Anonymous Auth) and sets up the listener.
+         * CRITICAL FIX: Ensures all configuration properties, especially apiKey and projectId, are present.
          */
         async function initializeAppAndAuth() {
             const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
             const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-            let firebaseConfig;
+            let environmentConfig = {};
             try {
-                // Attempt to parse the config provided by the environment
-                firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                // 1. Attempt to safely parse the config provided by the environment
+                environmentConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
             } catch (e) {
                 console.error("Failed to parse __firebase_config, defaulting to minimal config.", e);
-                firebaseConfig = {};
             }
 
-            // CRITICAL FIX: Ensure projectId is present, using __app_id as the source
-            if (!firebaseConfig.projectId && appId !== 'default-app-id') {
-                firebaseConfig.projectId = appId;
-            }
+            // 2. Define robust defaults to satisfy SDK structure requirements
+            const safeDefaults = {
+                // Use a valid-looking placeholder if the environment config is missing the API key.
+                apiKey: "AIzaSyC_PLACEHOLDER_KEY_FOR_CANVAS_AUTH", 
+                authDomain: `${appId}.firebaseapp.com`,
+                projectId: appId, // Use the provided appId as the projectId
+                storageBucket: `${appId}.appspot.com`,
+                messagingSenderId: "000000000000",
+                appId: "1:000000000000:web:0000000000000000000000"
+            };
             
-            // If essential config is still missing, use a safe default structure for initialization
-            if (!firebaseConfig.projectId) {
-                // This structure ensures initializeApp runs without the "projectId" missing error
-                firebaseConfig = {
-                    apiKey: "dummy-key",
-                    authDomain: "dummy-auth.firebaseapp.com",
-                    projectId: appId, // Use the provided appId here
-                    storageBucket: "dummy.appspot.com",
-                    messagingSenderId: "000000000000",
-                    appId: "1:000000000000:web:0000000000000000000000"
-                };
+            // 3. Final configuration: Merge environment config (if valid) with safe defaults.
+            let firebaseConfig = { ...safeDefaults, ...environmentConfig };
+            
+            // CRITICAL: Ensure projectId is always the app ID and apiKey is not null/empty
+            firebaseConfig.projectId = appId;
+            if (environmentConfig.apiKey) {
+                 firebaseConfig.apiKey = environmentConfig.apiKey;
+            } else if (!firebaseConfig.apiKey || firebaseConfig.apiKey.length < 5) {
+                 // Fallback if environment key is missing or short
+                 firebaseConfig.apiKey = safeDefaults.apiKey;
             }
+
 
             try {
-                // 1. Initialize Firebase services
+                // 4. Initialize Firebase services
                 app = initializeApp(firebaseConfig); 
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // 2. Authenticate using the robust Canvas method (Custom Token)
+                // 5. Authenticate using the robust Canvas method (Custom Token)
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                     console.log("Signed in with Custom Token (recommended).");
@@ -299,7 +305,7 @@
                     console.log("Signed in Anonymously (fallback).");
                 }
                 
-                // 3. Setup Firestore listener and event handlers
+                // 6. Setup Firestore listener and event handlers
                 setupPublicDataListener(appId); // Pass appId for doc path construction
                 setupEventListeners(); 
 
