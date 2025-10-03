@@ -196,10 +196,19 @@
         const PUBLIC_COLLECTION = 'app_state';
         const PUBLIC_DOC_ID = 'status_data'; 
 
-        // --- CANVAS ENVIRONMENT CONFIGURATION ---
-        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-        const firebaseConfig = JSON.parse(firebaseConfigString);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId || 'default-app-id';
+        // --- FIREBASE CONFIGURATION (Provided by User) ---
+        // We prioritize the explicit configuration provided by the user in the chat.
+        const firebaseConfig = {
+            apiKey: "AIzaSyCbsageWK7FXsuYE1XqRw8a5LdQi0u3myo",
+            authDomain: "first-3b0e2.firebaseapp.com",
+            projectId: "first-3b0e2",
+            storageBucket: "first-3b0e2.firebasestorage.app",
+            messagingSenderId: "167332139493",
+            appId: "1:167332139493:web:fb85490865854ed238df0c"
+        };
+        
+        // Use the environment's app ID if available, otherwise fallback to the project ID
+        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
         
         // Utility elements
         const loadingOverlay = document.getElementById('loading-overlay');
@@ -259,12 +268,7 @@
          */
         async function initializeAppAndAuth() {
             try {
-                if (!firebaseConfig.projectId) {
-                    console.error("Firebase config is incomplete. Cannot initialize Firestore.");
-                    hideLoading();
-                    return;
-                }
-
+                // Initialize using the provided configuration
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
@@ -290,11 +294,13 @@
                 return;
             }
 
+            // Document path: artifacts/{appId}/public/data/app_state/status_data
             const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
             onSnapshot(docRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
+                    // Ensure 'accounts' is an object for iteration
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
                 } else {
                     currentAccounts = {};
@@ -305,7 +311,10 @@
             }, (error) => {
                 console.error("Error listening to public data document:", error);
                 showNotification('error', `Real-time data error: ${error.message}`);
-                hideLoading();
+                // Only hide loading here if it's not already hidden
+                if (loadingOverlay.style.display !== 'none') {
+                   hideLoading();
+                }
             });
         }
         
@@ -574,7 +583,6 @@
             addAccountBtn.addEventListener('click', function() {
                 console.log("Add Account button clicked.");
                 if (isDbReady) {
-                    // FIX: Explicitly calling the function via the window object ensures it is found in the module scope
                     window.openAccountModal('new');
                 } else {
                     console.error("Click ignored: DB not ready.");
