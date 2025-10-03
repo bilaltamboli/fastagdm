@@ -231,16 +231,19 @@
                 console.error("DEBUG: Failed to parse __firebase_config. Is it valid JSON?", e);
             }
 
-            // Assemble the final configuration object, ensuring appId is used for projectId
+            // Assemble the final configuration object.
+            // We prioritize the user's provided project ID for authentication, 
+            // as the API key is tied to that specific project.
             const firebaseConfig = {
                 ...environmentConfig,
-                projectId: appId, 
+                // Ensure projectId is present, falling back to the Canvas App ID if missing.
+                projectId: environmentConfig.projectId || appId,
             };
             
             // --- CRITICAL DEBUGGING LOGS ---
             console.log("--- Firebase Configuration Debug ---");
-            console.log("App ID:", appId);
-            console.log("Raw Config String (Pre-Parse Cleanup):", typeof __firebase_config !== 'undefined' ? __firebase_config : 'N/A');
+            console.log("Canvas App ID (__app_id):", appId);
+            console.log("Project ID used for Firebase Auth:", firebaseConfig.projectId);
             console.log("Final Config Object used for initialization:", firebaseConfig);
             if (!firebaseConfig.apiKey) {
                  console.error("CRITICAL: API Key (apiKey) is missing or undefined. This is the likely cause of the (auth/api-key-not-valid) error.");
@@ -258,7 +261,8 @@
                 await signInAnonymously(auth);
                 console.log("DEBUG: Signed in Anonymously. Data access is public via security rules.");
                 
-                // 3. Setup Firestore listener
+                // 3. Setup Firestore listener. NOTE: We must use the Canvas App ID (appId) 
+                // for the collection path to respect the security rules for this environment.
                 setupPublicDataListener(appId);
 
             } catch (error) {
