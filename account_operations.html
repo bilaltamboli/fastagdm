@@ -196,14 +196,6 @@
         const PUBLIC_COLLECTION = 'app_state';
         const PUBLIC_DOC_ID = 'status_data'; 
 
-        // --- FIREBASE CONFIGURATION (Use global environment variables) ---
-        // This is the correct way to initialize in this environment to prevent config errors.
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        
-        // Ensure we have a valid appId, defaulting to a safe identifier if config parsing fails.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId || 'default-app-id';
-        
         // Utility elements
         const loadingOverlay = document.getElementById('loading-overlay');
         const appContainer = document.getElementById('app-container');
@@ -261,9 +253,39 @@
          * Initializes Firebase (using Custom Token or Anonymous Auth) and sets up the listener.
          */
         async function initializeAppAndAuth() {
+            const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+            let firebaseConfig;
+            try {
+                // Attempt to parse the config provided by the environment
+                firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+            } catch (e) {
+                console.error("Failed to parse __firebase_config, defaulting to minimal config.", e);
+                firebaseConfig = {};
+            }
+
+            // CRITICAL FIX: Ensure projectId is present, using __app_id as the source
+            if (!firebaseConfig.projectId && appId !== 'default-app-id') {
+                firebaseConfig.projectId = appId;
+            }
+            
+            // If essential config is still missing, use a safe default structure for initialization
+            if (!firebaseConfig.projectId) {
+                // This structure ensures initializeApp runs without the "projectId" missing error
+                firebaseConfig = {
+                    apiKey: "dummy-key",
+                    authDomain: "dummy-auth.firebaseapp.com",
+                    projectId: appId, // Use the provided appId here
+                    storageBucket: "dummy.appspot.com",
+                    messagingSenderId: "000000000000",
+                    appId: "1:000000000000:web:0000000000000000000000"
+                };
+            }
+
             try {
                 // 1. Initialize Firebase services
-                app = initializeApp(firebaseConfig);
+                app = initializeApp(firebaseConfig); 
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
@@ -278,7 +300,7 @@
                 }
                 
                 // 3. Setup Firestore listener and event handlers
-                setupPublicDataListener(); 
+                setupPublicDataListener(appId); // Pass appId for doc path construction
                 setupEventListeners(); 
 
             } catch (error) {
@@ -291,7 +313,7 @@
         /**
          * Sets up the real-time listener for the public, shared data document.
          */
-        function setupPublicDataListener() {
+        function setupPublicDataListener(appId) {
             if (!db) {
                 console.error("LISTENER FAIL: DB not ready.");
                 return;
@@ -551,6 +573,7 @@
          * Generic function to update the main public data document.
          */
         async function updateFirestoreData(updateData, successMessage) {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
             // Path: artifacts/{appId}/public/data/app_state/status_data
             const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
