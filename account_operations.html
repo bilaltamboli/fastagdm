@@ -184,7 +184,7 @@
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, getDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global Firebase instances and state
@@ -196,19 +196,13 @@
         const PUBLIC_COLLECTION = 'app_state';
         const PUBLIC_DOC_ID = 'status_data'; 
 
-        // --- FIREBASE CONFIGURATION (Provided by User) ---
-        // We prioritize the explicit configuration provided by the user in the chat.
-        const firebaseConfig = {
-            apiKey: "AIzaSyCbsageWK7FXsuYE1XqRw8a5LdQi0u3myo",
-            authDomain: "first-3b0e2.firebaseapp.com",
-            projectId: "first-3b0e2",
-            storageBucket: "first-3b0e2.firebasestorage.app",
-            messagingSenderId: "167332139493",
-            appId: "1:167332139493:web:fb85490865854ed238df0c"
-        };
+        // --- FIREBASE CONFIGURATION (Use global environment variables) ---
+        // This is the correct way to initialize in this environment to prevent config errors.
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
-        // Use the environment's app ID if available, otherwise fallback to the project ID
-        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId;
+        // Ensure we have a valid appId, defaulting to a safe identifier if config parsing fails.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId || 'default-app-id';
         
         // Utility elements
         const loadingOverlay = document.getElementById('loading-overlay');
@@ -264,17 +258,26 @@
         }
 
         /**
-         * Initializes Firebase (using Anonymous Auth for Firestore access) and sets up the listener.
+         * Initializes Firebase (using Custom Token or Anonymous Auth) and sets up the listener.
          */
         async function initializeAppAndAuth() {
             try {
-                // Initialize using the provided configuration
+                // 1. Initialize Firebase services
                 app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                await signInAnonymously(auth);
+                // 2. Authenticate using the robust Canvas method (Custom Token)
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                    console.log("Signed in with Custom Token (recommended).");
+                } else {
+                    // Fallback to anonymous sign-in if no token is available
+                    await signInAnonymously(auth);
+                    console.log("Signed in Anonymously (fallback).");
+                }
                 
+                // 3. Setup Firestore listener and event handlers
                 setupPublicDataListener(); 
                 setupEventListeners(); 
 
