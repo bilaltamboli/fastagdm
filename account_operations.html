@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Account Operations Dashboard (Public Data)</title>
+    <title>Account Status Dashboard (Real-time)</title>
     <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Use Inter font family -->
@@ -65,6 +65,25 @@
         #add-account-btn:not(.disabled-style) {
             background-color: #4f46e5; /* Indigo 600 */
         }
+        /* Style for the select dropdowns on the card */
+        .status-select {
+            padding: 4px 8px;
+            font-size: 0.875rem; /* text-sm */
+            border-radius: 6px; /* rounded-md */
+            border: 1px solid #d1d5db; /* border-gray-300 */
+            background-color: #f9fafb; /* bg-gray-50 */
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            transition: border-color 0.15s, box-shadow 0.15s;
+            appearance: none; /* Remove default arrow */
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3e%3cpath d='M7 7l3-3 3 3m0 6l-3 3-3-3' stroke='%234b5563' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.5rem center;
+            background-size: 1.5em 1.5em;
+        }
+        .status-select:focus {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 1px #6366f1;
+        }
     </style>
 </head>
 <body class="font-sans bg-gray-50 min-h-screen p-4 sm:p-8">
@@ -81,32 +100,23 @@
     </div>
 
     <!-- Main Content Card -->
-    <div id="app-container" class="max-w-4xl mx-auto bg-white shadow-2xl rounded-xl p-6 sm:p-10 transform transition-all duration-300 scale-100 opacity-0 hidden">
-        <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Account Operations Dashboard</h1>
-        <p class="text-gray-500 mb-8">This dashboard uses **public data storage**. All users see and manage the same list of accounts.</p>
+    <div id="app-container" class="max-w-6xl mx-auto bg-white shadow-2xl rounded-xl p-6 sm:p-10 transform transition-all duration-300 scale-100 opacity-0 hidden">
+        <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Account Status Dashboard</h1>
+        <p class="text-gray-500 mb-8">This dashboard is for quick status management. Changes are saved instantly!</p>
 
         <!-- Notification Bars -->
         <div id="notification-box" class="hidden p-4 mb-4 rounded-lg text-sm text-green-700 bg-green-100" role="alert">
-            <span class="font-medium">Success!</span> Account saved successfully.
+            <span class="font-medium">Success!</span> Status updated successfully.
         </div>
         <div id="error-box" class="hidden p-4 mb-4 rounded-lg text-sm text-red-700 bg-red-100" role="alert">
             <span class="font-medium">Error!</span> Something went wrong. Check console for details.
         </div>
         
-        <!-- Total Summation Card -->
-        <div id="total-collection-card" class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-8">
-            <h3 class="text-lg font-semibold text-indigo-700">Total Today's Amount Collection</h3>
-            <p id="total-amount-display" class="text-4xl font-extrabold text-indigo-900 mt-1">
-                <!-- Initial display, updated by JS -->
-                ₹0.00
-            </p>
-        </div>
-
         <!-- Section: Account List and Add Button -->
         <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex justify-between items-center">
-            My Accounts
-            <!-- FIX: Disabled by default with distinct styling -->
-            <button id="add-account-btn" onclick="openAccountModal('new')" class="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out disabled-style" disabled>
+            Managed Accounts
+            <!-- Button is disabled until DB ready -->
+            <button id="add-account-btn" class="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out disabled-style" disabled>
                 <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
                 </svg>
@@ -114,14 +124,14 @@
             </button>
         </h2>
 
-        <!-- Account Cards Container -->
-        <div id="accounts-container" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+        <!-- Account Cards Container - Optimized for 20 accounts -->
+        <div id="accounts-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mt-4">
             <p id="no-accounts-message" class="col-span-full text-center text-gray-500 italic hidden">You haven't added any accounts yet. Click "Add New Account" above!</p>
             <!-- Account cards will be dynamically inserted here -->
         </div>
     </div>
 
-    <!-- Account Add/Edit Modal -->
+    <!-- Account Add/Edit Modal (For Fixed Fields) -->
     <div id="account-modal-backdrop" class="modal-backdrop">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg m-4 transform transition-all duration-300 scale-95 opacity-0" id="account-modal">
             <div class="p-6">
@@ -129,63 +139,31 @@
                 <form id="account-form" onsubmit="event.preventDefault(); saveAccountFromModal();">
                     <input type="hidden" id="modal-account-id">
                     
+                    <p class="font-medium text-indigo-700 mb-4">Fixed Account Details (Editable only here):</p>
+                    
                     <div class="space-y-4">
-                        <p class="font-medium text-indigo-700">Fixed/Listing Details:</p>
                         <!-- Name -->
                         <div>
                             <label for="modal-name" class="block text-sm font-medium text-gray-700">Account Name (Required)</label>
                             <input type="text" id="modal-name" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="Account Name">
                         </div>
 
-                        <!-- Fastag Id -->
+                        <!-- FASTAG ID -->
                         <div>
-                            <label for="modal-fastag-id" class="block text-sm font-medium text-gray-700">Fastag ID</label>
-                            <input type="text" id="modal-fastag-id" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="Enter Fastag ID">
+                            <label for="modal-fastag-id" class="block text-sm font-medium text-gray-700">FASTAG ID</label>
+                            <input type="text" id="modal-fastag-id" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="Enter FASTAG ID">
                         </div>
 
-                        <!-- Car Number -->
+                        <!-- Vehicle Number -->
                         <div>
-                            <label for="modal-car-number" class="block text-sm font-medium text-gray-700">Car Number</label>
-                            <input type="text" id="modal-car-number" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="e.g., MH01AB1234">
+                            <label for="modal-vehicle-number" class="block text-sm font-medium text-gray-700">Vehicle Number</label>
+                            <input type="text" id="modal-vehicle-number" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="e.g., MH01AB1234">
                         </div>
 
                         <!-- Airtel UPI ID -->
                         <div>
                             <label for="modal-airtel-upi-id" class="block text-sm font-medium text-gray-700">Airtel UPI ID</label>
                             <input type="text" id="modal-airtel-upi-id" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="e.g., username@airtel">
-                        </div>
-
-                        <hr class="border-gray-200">
-
-                        <p class="font-medium text-indigo-700">Changeable/Operational Details:</p>
-
-                        <!-- Date -->
-                        <div>
-                            <label for="modal-date" class="block text-sm font-medium text-gray-700">Date</label>
-                            <input type="date" id="modal-date" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border">
-                        </div>
-
-                        <!-- Todays Amount Collection -->
-                        <div>
-                            <label for="modal-amount-collection" class="block text-sm font-medium text-gray-700">Today's Amount Collection</label>
-                            <input type="number" step="0.01" id="modal-amount-collection" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="e.g., 5000.00">
-                        </div>
-
-                        <!-- Cashout Status -->
-                        <div>
-                            <label for="modal-cashout-status" class="block text-sm font-medium text-gray-700">Cashout Status</label>
-                            <select id="modal-cashout-status" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border">
-                                <option value="">Select Status</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Completed">Completed</option>
-                                <option value="N/A">N/A</option>
-                            </select>
-                        </div>
-
-                        <!-- Account Loaded By User -->
-                        <div>
-                            <label for="modal-account-loaded-by" class="block text-sm font-medium text-gray-700">Account Loaded By User</label>
-                            <input type="number" step="0.01" id="modal-account-loaded-by" class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-3 border" placeholder="e.g., 2000.00">
                         </div>
                     </div>
 
@@ -216,7 +194,7 @@
         
         // --- PUBLIC DATA CONFIGURATION ---
         const PUBLIC_COLLECTION = 'app_state';
-        const PUBLIC_DOC_ID = 'dashboard_data';
+        const PUBLIC_DOC_ID = 'status_data'; // Renamed document ID for the new scope
 
         // --- CANVAS ENVIRONMENT CONFIGURATION ---
         const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
@@ -230,7 +208,6 @@
         const errorBox = document.getElementById('error-box');
         const accountsContainer = document.getElementById('accounts-container');
         const noAccountsMessage = document.getElementById('no-accounts-message');
-        const totalAmountDisplay = document.getElementById('total-amount-display');
         const addAccountBtn = document.getElementById('add-account-btn');
 
         const modalBackdrop = document.getElementById('account-modal-backdrop');
@@ -238,12 +215,8 @@
         const modalAccountId = document.getElementById('modal-account-id');
         const modalName = document.getElementById('modal-name');
         const modalFastagId = document.getElementById('modal-fastag-id');
-        const modalCarNumber = document.getElementById('modal-car-number');
+        const modalVehicleNumber = document.getElementById('modal-vehicle-number');
         const modalAirtelUpiId = document.getElementById('modal-airtel-upi-id');
-        const modalDate = document.getElementById('modal-date');
-        const modalAmountCollection = document.getElementById('modal-amount-collection');
-        const modalCashoutStatus = document.getElementById('modal-cashout-status');
-        const modalAccountLoadedBy = document.getElementById('modal-account-loaded-by');
 
         setLogLevel('Debug'); 
 
@@ -255,40 +228,11 @@
             appContainer.classList.remove('hidden', 'opacity-0');
             appContainer.classList.add('opacity-100');
             
-            // Set flag and enable the Add button for a better UX
+            // Set flag and enable the Add button
             isDbReady = true; 
             addAccountBtn.disabled = false;
-            // Remove the custom disabled style and enable hover effect
             addAccountBtn.classList.remove('disabled-style');
             addAccountBtn.classList.add('hover:bg-indigo-700'); 
-        }
-
-        /**
-         * Utility function to format numbers as currency (Indian Rupee assumed).
-         * @param {number|string} amount 
-         * @returns {string} Formatted currency string.
-         */
-        function formatCurrency(amount) {
-            const num = parseFloat(amount);
-            if (isNaN(num) || num === null || num === undefined) return '₹0.00';
-            return num.toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
-        }
-        window.formatCurrency = formatCurrency; // Expose to global scope for use in HTML template
-
-        /**
-         * Utility function to get Tailwind CSS class for Cashout Status.
-         * @param {string} status The cashout status string.
-         * @returns {string} Tailwind CSS class string.
-         */
-        function getCashoutStatusClass(status) {
-            switch (status) {
-                case 'Completed':
-                    return 'text-green-600';
-                case 'Pending':
-                    return 'text-yellow-600';
-                default:
-                    return 'text-gray-500';
-            }
         }
 
         /**
@@ -327,6 +271,7 @@
                 await signInAnonymously(auth);
                 
                 setupPublicDataListener(); 
+                setupEventListeners(); // Setup event listeners after auth
 
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Error:", error);
@@ -349,13 +294,13 @@
             onSnapshot(docRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
+                    // Ensure 'accounts' is an object for mapping
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
                 } else {
                     currentAccounts = {};
                 }
 
                 renderAccounts(currentAccounts); 
-                updateTotalSummation(currentAccounts);
                 hideLoading();
             }, (error) => {
                 console.error("Error listening to public data document:", error);
@@ -365,26 +310,35 @@
         }
         
         /**
-         * Calculates the sum of all 'todayAmountCollection' and updates the UI.
-         * @param {object} accountsMap Map of account objects keyed by ID.
+         * Handles the change event from the inline status dropdowns.
+         * @param {string} accountId The ID of the account being updated.
+         * @param {string} field The field name being updated (e.g., 'todaysStatus').
+         * @param {string} value The new value.
          */
-        function updateTotalSummation(accountsMap) {
-            let total = 0;
-            const accountKeys = Object.keys(accountsMap);
+        window.handleStatusUpdate = async function(accountId, field, value) {
+            if (!db || !isDbReady) {
+                showNotification('error', "Database connection not ready. Please wait a moment.");
+                return;
+            }
+            
+            // Create a temporary object to hold the updated account data
+            const updatedAccount = {
+                ...currentAccounts[accountId],
+                [field]: value
+            };
 
-            accountKeys.forEach(id => {
-                const amount = parseFloat(accountsMap[id].todayAmountCollection);
-                if (!isNaN(amount) && amount > 0) {
-                    total += amount;
-                }
-            });
-
-            totalAmountDisplay.textContent = formatCurrency(total);
+            const updatedAccounts = {
+                ...currentAccounts,
+                [accountId]: updatedAccount
+            };
+            
+            // Update Firestore with the entire map of accounts
+            await updateFirestoreData({ accounts: updatedAccounts }, `Status for ${updatedAccount.name} updated to ${value}.`);
         }
 
 
         /**
-         * Renders the accounts list in the UI.
+         * Renders the accounts list in the UI with inline editable fields.
          * @param {object} accountsMap Map of account objects keyed by ID.
          */
         function renderAccounts(accountsMap) {
@@ -397,19 +351,19 @@
             }
             noAccountsMessage.classList.add('hidden');
 
-            // Sort accounts by name for consistent display
+            // Sort accounts by name
             const sortedKeys = accountKeys.sort((a, b) => accountsMap[a].name.localeCompare(accountsMap[b].name));
 
             sortedKeys.forEach(id => {
                 const account = accountsMap[id];
                 const card = document.createElement('div');
                 card.id = `account-${id}`;
-                card.className = 'bg-white border border-gray-200 rounded-xl shadow-lg p-6 hover:shadow-xl transition duration-300 space-y-4';
+                card.className = 'bg-white border border-gray-200 rounded-xl shadow-lg p-5 hover:shadow-xl transition duration-300 space-y-3';
                 card.innerHTML = `
-                    <div class="flex justify-between items-start">
-                        <h3 class="text-xl font-bold text-indigo-700">${account.name || 'Untitled Account'}</h3>
-                        <div class="flex space-x-2">
-                            <button onclick="openAccountModal('${id}')" class="text-indigo-500 hover:text-indigo-700 p-1 rounded-full hover:bg-indigo-50 transition duration-150" title="Edit Account">
+                    <div class="flex justify-between items-start border-b border-indigo-100 pb-3">
+                        <h3 class="text-xl font-bold text-indigo-700 truncate">${account.name || 'Untitled'}</h3>
+                        <div class="flex space-x-1">
+                            <button onclick="openAccountModal('${id}')" class="text-indigo-500 hover:text-indigo-700 p-1 rounded-full hover:bg-indigo-50 transition duration-150" title="Edit Fixed Details">
                                 <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
                             </button>
                             <button onclick="deleteAccount('${id}')" class="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-50 transition duration-150" title="Delete Account">
@@ -418,45 +372,46 @@
                         </div>
                     </div>
 
-                    <!-- Fixed Details (Listing Details) -->
-                    <div class="border-b border-gray-100 pb-3">
-                        <p class="text-xs font-bold text-gray-500 uppercase mb-2">Fixed Account Identifiers</p>
-                        <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
-                            <div class="truncate">
-                                <span class="font-medium text-gray-500">Fastag ID:</span> 
-                                <span class="block text-gray-800 font-semibold">${account.fastagId || 'N/A'}</span>
-                            </div>
-                            <div class="truncate">
-                                <span class="font-medium text-gray-500">Car Number:</span> 
-                                <span class="block text-gray-800 font-semibold">${account.carNumber || 'N/A'}</span>
-                            </div>
-                            <div class="col-span-2 truncate">
-                                <span class="font-medium text-gray-500">Airtel UPI ID:</span> 
-                                <span class="block text-gray-800 font-semibold">${account.airtelUpiId || 'N/A'}</span>
-                            </div>
-                        </div>
+                    <!-- FIXED FIELDS DISPLAY -->
+                    <div class="space-y-2 text-sm text-gray-600">
+                        <div><span class="font-medium text-gray-500">FASTAG ID:</span> <span class="font-semibold text-gray-800 break-words">${account.fastagId || 'N/A'}</span></div>
+                        <div><span class="font-medium text-gray-500">Vehicle No:</span> <span class="font-semibold text-gray-800 break-words">${account.vehicleNumber || 'N/A'}</span></div>
+                        <div><span class="font-medium text-gray-500">UPI ID:</span> <span class="font-semibold text-gray-800 break-words">${account.airtelUpiId || 'N/A'}</span></div>
                     </div>
 
-                    <!-- Dynamic Details (Editable Details) -->
-                    <div>
-                        <p class="text-xs font-bold text-gray-500 uppercase mb-2">Dynamic Operational Details</p>
-                        <div class="grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
-                            <div class="truncate">
-                                <span class="font-medium text-gray-500">Date:</span> 
-                                <span class="block text-gray-800 font-semibold">${account.date || 'N/A'}</span>
-                            </div>
-                            <div class="truncate">
-                                <span class="font-medium text-gray-500">Amount Collected:</span> 
-                                <span class="block text-gray-800 font-semibold">${formatCurrency(account.todayAmountCollection)}</span>
-                            </div>
-                            <div class="truncate">
-                                <span class="font-medium text-gray-500">Cashout Status:</span> 
-                                <span class="block font-semibold ${getCashoutStatusClass(account.cashoutStatus)}">${account.cashoutStatus || 'N/A'}</span>
-                            </div>
-                            <div class="truncate">
-                                <span class="font-medium text-gray-500">Loaded by User:</span> 
-                                <span class="block text-gray-800 font-semibold">${formatCurrency(account.accountLoadedByUser)}</span>
-                            </div>
+                    <hr class="border-gray-100">
+
+                    <!-- EDITABLE FIELDS (Inline Dropdowns) -->
+                    <div class="space-y-3">
+                        <!-- Todays Status -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Todays Status</label>
+                            <select id="status-${id}" class="status-select w-full" 
+                                onchange="handleStatusUpdate('${id}', 'todaysStatus', this.value)">
+                                <option value="Pending" ${account.todaysStatus === 'Pending' ? 'selected' : ''}>Pending</option>
+                                <option value="Completed" ${account.todaysStatus === 'Completed' ? 'selected' : ''}>Completed</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Cashout -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Cashout Status</label>
+                            <select id="cashout-${id}" class="status-select w-full" 
+                                onchange="handleStatusUpdate('${id}', 'cashoutStatus', this.value)">
+                                <option value="Pending" ${account.cashoutStatus === 'Pending' ? 'selected' : ''}>Pending</option>
+                                <option value="Completed" ${account.cashoutStatus === 'Completed' ? 'selected' : ''}>Completed</option>
+                            </select>
+                        </div>
+
+                        <!-- Admin -->
+                        <div>
+                            <label class="block text-xs font-medium text-gray-500 mb-1">Admin User</label>
+                            <select id="admin-${id}" class="status-select w-full" 
+                                onchange="handleStatusUpdate('${id}', 'adminUser', this.value)">
+                                <option value="" ${account.adminUser === '' || account.adminUser === undefined ? 'selected' : ''} disabled>Select Admin</option>
+                                <option value="Bilal" ${account.adminUser === 'Bilal' ? 'selected' : ''}>Bilal</option>
+                                <option value="Vishu" ${account.adminUser === 'Vishu' ? 'selected' : ''}>Vishu</option>
+                            </select>
                         </div>
                     </div>
                 `;
@@ -465,10 +420,9 @@
         }
 
         /**
-         * Opens the modal for adding a new account or editing an existing one.
+         * Opens the modal for adding a new account or editing fixed fields.
          */
         window.openAccountModal = function(id) {
-            // Defense mechanism: Stop if not ready, although the button should be disabled
             if (!isDbReady) {
                 showNotification('error', "Database connection not ready. Please wait a moment.");
                 return;
@@ -481,35 +435,22 @@
 
             modalAccountId.value = id;
             
-            // Clear or set default fields
+            // Clear fields
             modalName.value = '';
             modalFastagId.value = '';
-            modalCarNumber.value = '';
+            modalVehicleNumber.value = '';
             modalAirtelUpiId.value = '';
-            modalDate.value = new Date().toISOString().substring(0, 10); // Default to today's date
-            modalAmountCollection.value = '';
-            modalCashoutStatus.value = '';
-            modalAccountLoadedBy.value = '';
             
             if (id === 'new') {
                 modalTitle.textContent = 'Add New Account';
-                // Always ensure the date is current for new entries
-                modalDate.value = new Date().toISOString().substring(0, 10); 
             } else {
-                modalTitle.textContent = 'Edit Account';
+                modalTitle.textContent = 'Edit Fixed Details';
                 const account = currentAccounts[id];
                 if (account) {
-                    // Fixed Fields
                     modalName.value = account.name || '';
                     modalFastagId.value = account.fastagId || '';
-                    modalCarNumber.value = account.carNumber || '';
+                    modalVehicleNumber.value = account.vehicleNumber || '';
                     modalAirtelUpiId.value = account.airtelUpiId || '';
-
-                    // Editable Fields
-                    modalDate.value = account.date || new Date().toISOString().substring(0, 10);
-                    modalAmountCollection.value = account.todayAmountCollection || '';
-                    modalCashoutStatus.value = account.cashoutStatus || '';
-                    modalAccountLoadedBy.value = account.accountLoadedByUser || '';
                 }
             }
         }
@@ -529,7 +470,7 @@
         }
 
         /**
-         * Saves the account data from the modal to Firestore.
+         * Saves the account data (fixed fields) from the modal to Firestore.
          */
         window.saveAccountFromModal = async function() {
             if (!db || !isDbReady) {
@@ -540,37 +481,35 @@
             const isNew = modalAccountId.value === 'new';
             const accountId = isNew ? crypto.randomUUID() : modalAccountId.value;
 
-            // Ensure amount collection and loaded by are saved as numbers or null for clean data
-            const amountCollection = modalAmountCollection.value.trim() !== '' ? parseFloat(modalAmountCollection.value.trim()) : null;
-            const accountLoadedBy = modalAccountLoadedBy.value.trim() !== '' ? parseFloat(modalAccountLoadedBy.value.trim()) : null;
+            const baseAccountData = currentAccounts[accountId] || {
+                todaysStatus: 'Pending',
+                cashoutStatus: 'Pending',
+                adminUser: '', // Default to empty
+            };
 
-
-            const newAccountData = {
+            const newFixedData = {
                 // Fixed/Listing Details
                 name: modalName.value.trim(),
                 fastagId: modalFastagId.value.trim(),
-                carNumber: modalCarNumber.value.trim(),
+                vehicleNumber: modalVehicleNumber.value.trim(),
                 airtelUpiId: modalAirtelUpiId.value.trim(),
-
-                // Changeable/Operational Details
-                date: modalDate.value,
-                todayAmountCollection: amountCollection,
-                cashoutStatus: modalCashoutStatus.value || 'N/A', 
-                accountLoadedByUser: accountLoadedBy,
             };
 
-            if (!newAccountData.name) {
+            if (!newFixedData.name) {
                 showNotification('error', "Account Name is required.");
                 return;
             }
 
+            // Merge fixed fields with existing status fields (if editing), or defaults (if new)
+            const updatedAccountData = { ...baseAccountData, ...newFixedData };
+            
             // Create a new map of accounts by merging the existing ones with the new/updated one
             const updatedAccounts = {
                 ...currentAccounts,
-                [accountId]: newAccountData
+                [accountId]: updatedAccountData
             };
 
-            await updateFirestoreData({ accounts: updatedAccounts }, isNew ? 'Account Added' : 'Account Updated');
+            await updateFirestoreData({ accounts: updatedAccounts }, isNew ? 'Account Added' : 'Fixed Details Updated');
             closeAccountModal();
         }
 
@@ -579,12 +518,10 @@
          */
         window.deleteAccount = async function(id) {
             if (!db || !isDbReady) {
-                showNotification('error', "Database connection not ready.");
+                showNotification('error', "Database connection not ready. Please wait a moment.");
                 return;
             }
             
-            console.log(`Deleting account ${id}.`);
-
             if (!currentAccounts[id]) {
                 showNotification('error', 'Account not found.');
                 return;
@@ -601,7 +538,7 @@
          * Generic function to update the main public data document.
          */
         async function updateFirestoreData(updateData, successMessage) {
-            // Path: artifacts/{appId}/public/data/app_state/dashboard_data
+            // Path: artifacts/{appId}/public/data/app_state/status_data
             const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
             try {
@@ -616,7 +553,10 @@
                 }
 
                 await setDoc(docRef, finalUpdate, { merge: true });
-                showNotification('success', successMessage);
+                // Only show a brief success message for small status updates, otherwise rely on UI change
+                if (successMessage.includes('Updated') || successMessage.includes('Added')) {
+                    showNotification('success', successMessage);
+                }
                 return true;
 
             } catch (error) {
@@ -624,6 +564,19 @@
                 showNotification('error', `Failed to save changes: ${error.message}`);
                 return false;
             }
+        }
+        
+        /**
+         * Sets up the event listener for the Add Account button.
+         */
+        function setupEventListeners() {
+            addAccountBtn.addEventListener('click', function() {
+                if (isDbReady) {
+                    openAccountModal('new');
+                } else {
+                    showNotification('error', "Database connection not ready. Please wait a moment.");
+                }
+            });
         }
 
 
