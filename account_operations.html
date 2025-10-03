@@ -194,7 +194,7 @@
         
         // --- PUBLIC DATA CONFIGURATION ---
         const PUBLIC_COLLECTION = 'app_state';
-        const PUBLIC_DOC_ID = 'status_data'; // Renamed document ID for the new scope
+        const PUBLIC_DOC_ID = 'status_data'; 
 
         // --- CANVAS ENVIRONMENT CONFIGURATION ---
         const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
@@ -233,6 +233,7 @@
             addAccountBtn.disabled = false;
             addAccountBtn.classList.remove('disabled-style');
             addAccountBtn.classList.add('hover:bg-indigo-700'); 
+            console.log("DB Ready: isDbReady set to true. Button enabled.");
         }
 
         /**
@@ -271,7 +272,7 @@
                 await signInAnonymously(auth);
                 
                 setupPublicDataListener(); 
-                setupEventListeners(); // Setup event listeners after auth
+                setupEventListeners(); 
 
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Error:", error);
@@ -294,7 +295,6 @@
             onSnapshot(docRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    // Ensure 'accounts' is an object for mapping
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
                 } else {
                     currentAccounts = {};
@@ -311,9 +311,6 @@
         
         /**
          * Handles the change event from the inline status dropdowns.
-         * @param {string} accountId The ID of the account being updated.
-         * @param {string} field The field name being updated (e.g., 'todaysStatus').
-         * @param {string} value The new value.
          */
         window.handleStatusUpdate = async function(accountId, field, value) {
             if (!db || !isDbReady) {
@@ -423,8 +420,11 @@
          * Opens the modal for adding a new account or editing fixed fields.
          */
         window.openAccountModal = function(id) {
+            console.log(`Attempting to open modal for ID: ${id}`);
+
             if (!isDbReady) {
                 showNotification('error', "Database connection not ready. Please wait a moment.");
+                console.error("Modal failed to open: DB not ready.");
                 return;
             }
             
@@ -481,10 +481,11 @@
             const isNew = modalAccountId.value === 'new';
             const accountId = isNew ? crypto.randomUUID() : modalAccountId.value;
 
+            // Get existing status data or set defaults for a new account
             const baseAccountData = currentAccounts[accountId] || {
                 todaysStatus: 'Pending',
                 cashoutStatus: 'Pending',
-                adminUser: '', // Default to empty
+                adminUser: '', 
             };
 
             const newFixedData = {
@@ -571,9 +572,12 @@
          */
         function setupEventListeners() {
             addAccountBtn.addEventListener('click', function() {
+                console.log("Add Account button clicked.");
                 if (isDbReady) {
-                    openAccountModal('new');
+                    // FIX: Explicitly calling the function via the window object ensures it is found in the module scope
+                    window.openAccountModal('new');
                 } else {
+                    console.error("Click ignored: DB not ready.");
                     showNotification('error', "Database connection not ready. Please wait a moment.");
                 }
             });
