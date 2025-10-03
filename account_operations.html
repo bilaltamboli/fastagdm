@@ -218,39 +218,52 @@
 
             let environmentConfig = {};
             try {
-                // Safely parse environment config
-                environmentConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                let configString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+                
+                // CRITICAL: Sanitize config string in case user pasted 'const firebaseConfig = {...}'
+                configString = configString.replace(/^(const|let|var)\s+\w+\s*=\s*/, '').trim();
+                configString = configString.replace(/;?\s*$/, '').trim(); 
+                
+                // Attempt to parse the cleaned JSON string
+                environmentConfig = JSON.parse(configString);
+
             } catch (e) {
-                console.error("Failed to parse __firebase_config, defaulting to minimal config.", e);
+                console.error("DEBUG: Failed to parse __firebase_config. Is it valid JSON?", e);
             }
 
-            // CRITICAL FIX: Ensure essential fields are present for the SDK
+            // Assemble the final configuration object, ensuring appId is used for projectId
             const firebaseConfig = {
-                apiKey: environmentConfig.apiKey || "AIzaSyC_PUBLIC_PLACEHOLDER_KEY", 
-                authDomain: environmentConfig.authDomain || `${appId}.firebaseapp.com`,
-                projectId: environmentConfig.projectId || appId, 
-                // Add other required fields if available/needed, otherwise use safe defaults
-                ...environmentConfig
+                ...environmentConfig,
+                projectId: appId, 
             };
             
-            // Set projectId explicitly to ensure data is stored in the correct path
-            firebaseConfig.projectId = appId; 
+            // --- CRITICAL DEBUGGING LOGS ---
+            console.log("--- Firebase Configuration Debug ---");
+            console.log("App ID:", appId);
+            console.log("Raw Config String (Pre-Parse Cleanup):", typeof __firebase_config !== 'undefined' ? __firebase_config : 'N/A');
+            console.log("Final Config Object used for initialization:", firebaseConfig);
+            if (!firebaseConfig.apiKey) {
+                 console.error("CRITICAL: API Key (apiKey) is missing or undefined. This is the likely cause of the (auth/api-key-not-valid) error.");
+            }
+            console.log("----------------------------------");
+            // --- END DEBUGGING LOGS ---
 
             try {
                 // 1. Initialize Firebase services
                 const app = initializeApp(firebaseConfig); 
                 db = getFirestore(app);
                 
-                // 2. Sign in Anonymously (required by the environment, but security is handled by the rules)
+                // 2. Sign in Anonymously 
                 const auth = getAuth(app);
                 await signInAnonymously(auth);
-                console.log("Signed in Anonymously for environment compatibility. Data access is public via security rules.");
+                console.log("DEBUG: Signed in Anonymously. Data access is public via security rules.");
                 
                 // 3. Setup Firestore listener
                 setupPublicDataListener(appId);
 
             } catch (error) {
                 console.error("Firebase Initialization or Authentication Error:", error);
+                // Display the raw error message to the user
                 showNotification('error', `Setup error: ${error.message}. Please check your Firebase Config and Security Rules.`);
                 hideLoading();
             }
@@ -317,7 +330,12 @@
             }
             noAccountsMessage.classList.add('hidden');
 
-            const sortedKeys = accountKeys.sort((a, b) => accountsMap[a].name.localeCompare(accountsMap[b].name));
+            // Sort accounts alphabetically by name
+            const sortedKeys = accountKeys.sort((a, b) => {
+                const nameA = accountsMap[a].name || '';
+                const nameB = accountsMap[b].name || '';
+                return nameA.localeCompare(nameB);
+            });
 
             sortedKeys.forEach(id => {
                 const account = accountsMap[id];
