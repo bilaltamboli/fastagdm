@@ -83,11 +83,21 @@
         <div id="error-box" class="hidden p-4 mb-4 rounded-lg text-sm text-red-700 bg-red-100" role="alert">
             <span class="font-medium">Error!</span> Something went wrong. Check console for details.
         </div>
+        
+        <!-- === NEW: Total Summation Card === -->
+        <div id="total-collection-card" class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-8">
+            <h3 class="text-lg font-semibold text-indigo-700">Total Today's Amount Collection</h3>
+            <p id="total-amount-display" class="text-4xl font-extrabold text-indigo-900 mt-1">
+                ${formatCurrency(0)}
+            </p>
+        </div>
+        <!-- =============================== -->
 
         <!-- Section: Account List and Add Button -->
         <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex justify-between items-center">
             My Accounts
-            <button onclick="openAccountModal('new')" class="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+            <!-- FIX: Added ID, disabled by default, and modified classes for visual feedback -->
+            <button id="add-account-btn" onclick="openAccountModal('new')" class="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out opacity-50 cursor-not-allowed" disabled>
                 <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
                 </svg>
@@ -190,24 +200,19 @@
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, onSnapshot, getDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global Firebase instances
+        // Global Firebase instances and state
         let app, db, auth;
         let currentAccounts = {}; 
+        let isDbReady = false; // NEW: Flag to track if DB is ready
         
         // --- PUBLIC DATA CONFIGURATION ---
-        // Using a fixed path for public, shared data: artifacts/{appId}/public/data/app_state/dashboard_data
         const PUBLIC_COLLECTION = 'app_state';
         const PUBLIC_DOC_ID = 'dashboard_data';
 
         // --- CANVAS ENVIRONMENT CONFIGURATION ---
-        // Fallback config is needed if environment variables are somehow missing,
-        // though Firebase config is usually provided correctly.
         const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
         const firebaseConfig = JSON.parse(firebaseConfigString);
-        
-        // Use the application ID provided by the environment.
         const appId = typeof __app_id !== 'undefined' ? __app_id : firebaseConfig.projectId || 'default-app-id';
-        // --- END: CANVAS ENVIRONMENT CONFIGURATION ---
         
         // Utility elements
         const loadingOverlay = document.getElementById('loading-overlay');
@@ -216,6 +221,8 @@
         const errorBox = document.getElementById('error-box');
         const accountsContainer = document.getElementById('accounts-container');
         const noAccountsMessage = document.getElementById('no-accounts-message');
+        const totalAmountDisplay = document.getElementById('total-amount-display'); // NEW: Total display element
+        const addAccountBtn = document.getElementById('add-account-btn'); // NEW: Add button element
 
         const modalBackdrop = document.getElementById('account-modal-backdrop');
         const modalTitle = document.getElementById('modal-title');
@@ -232,12 +239,18 @@
         setLogLevel('Debug'); 
 
         /**
-         * Hides the loading overlay and shows the main app container.
+         * Hides the loading overlay, shows the main app container, and enables UI interaction.
          */
         function hideLoading() {
             loadingOverlay.style.display = 'none';
             appContainer.classList.remove('hidden', 'opacity-0');
             appContainer.classList.add('opacity-100');
+            
+            // NEW: Set flag and enable the Add button for a better UX
+            isDbReady = true; 
+            addAccountBtn.disabled = false;
+            addAccountBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            addAccountBtn.classList.add('hover:bg-indigo-700'); 
         }
 
         /**
@@ -250,6 +263,7 @@
             if (isNaN(num) || num === null || num === undefined) return 'N/A';
             return num.toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
         }
+        window.formatCurrency = formatCurrency; // Expose to global scope for use in HTML template
 
         /**
          * Utility function to get Tailwind CSS class for Cashout Status.
@@ -266,7 +280,6 @@
                     return 'text-gray-500';
             }
         }
-
 
         /**
          * Displays a notification message temporarily.
@@ -302,7 +315,6 @@
                 db = getFirestore(app);
                 auth = getAuth(app);
                 
-                // Sign in anonymously to gain a user object for Firestore rules compliance.
                 await signInAnonymously(auth);
                 console.log('AUTH SUCCESS: Signed in anonymously.');
                 
@@ -325,7 +337,6 @@
             }
             console.log('LISTENER: Setting up snapshot listener for public data.');
 
-            // Path: artifacts/{appId}/public/data/app_state/dashboard_data
             const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
             onSnapshot(docRef, async (docSnap) => {
@@ -333,25 +344,16 @@
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    
-                    // Update dynamic accounts list
-                    // Ensure 'accounts' property exists and is an object
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
-                    
                     console.log(`LISTENER SUCCESS: Data updated. Found ${Object.keys(currentAccounts).length} accounts.`);
-                    
-                    renderAccounts(currentAccounts); 
-
                 } else {
                     currentAccounts = {};
-                    renderAccounts({});
-                    
-                    // Set default date when starting fresh
                     modalDate.value = new Date().toISOString().substring(0, 10); 
-                    
                     console.log("LISTENER INFO: No data document found. Starting fresh.");
                 }
 
+                renderAccounts(currentAccounts); 
+                updateTotalSummation(currentAccounts); // NEW: Update total
                 hideLoading();
             }, (error) => {
                 console.error("Error listening to public data document:", error);
@@ -359,6 +361,25 @@
                 hideLoading();
             });
         }
+        
+        /**
+         * NEW: Calculates the sum of all 'todayAmountCollection' and updates the UI.
+         * @param {object} accountsMap Map of account objects keyed by ID.
+         */
+        function updateTotalSummation(accountsMap) {
+            let total = 0;
+            const accountKeys = Object.keys(accountsMap);
+
+            accountKeys.forEach(id => {
+                const amount = parseFloat(accountsMap[id].todayAmountCollection);
+                if (!isNaN(amount) && amount > 0) {
+                    total += amount;
+                }
+            });
+
+            totalAmountDisplay.textContent = formatCurrency(total);
+        }
+
 
         /**
          * Renders the accounts list in the UI.
@@ -446,6 +467,12 @@
          * Opens the modal for adding a new account or editing an existing one.
          */
         window.openAccountModal = function(id) {
+            // Defensive check (though the button should be disabled if not ready)
+            if (!isDbReady) {
+                showNotification('error', "Database connection is still initializing. Please wait a moment.");
+                return;
+            }
+            
             modalBackdrop.style.display = 'flex';
             const modalElement = document.getElementById('account-modal');
             modalElement.classList.remove('scale-95', 'opacity-0');
@@ -502,8 +529,8 @@
          * Saves the account data from the modal to Firestore.
          */
         window.saveAccountFromModal = async function() {
-            if (!db) {
-                showNotification('error', "Database connection not ready.");
+            if (!db || !isDbReady) {
+                showNotification('error', "Database connection not ready. Please wait a moment.");
                 return;
             }
 
@@ -525,7 +552,7 @@
                 // Changeable/Operational Details
                 date: modalDate.value,
                 todayAmountCollection: amountCollection,
-                cashoutStatus: modalCashoutStatus.value,
+                cashoutStatus: modalCashoutStatus.value || 'N/A', // Set default if empty
                 accountLoadedByUser: accountLoadedBy,
             };
 
@@ -548,7 +575,7 @@
          * Deletes an account and updates Firestore.
          */
         window.deleteAccount = async function(id) {
-            if (!db) {
+            if (!db || !isDbReady) {
                 showNotification('error', "Database connection not ready.");
                 return;
             }
