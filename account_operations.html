@@ -319,6 +319,10 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
         /**
          * Initializes Firebase and authenticates the user.
          */
+        /**
+         * Initializes Firebase and authenticates the user.
+         * FIX: Ensures setupProfileListener is called ONLY after user is authenticated.
+         */
         async function initializeAppAndAuth() {
             try {
                 if (Object.keys(firebaseConfig).length === 0) {
@@ -331,20 +335,31 @@ const initialAuthToken = null; // Forces the script to use anonymous sign-in
                 db = getFirestore(app);
                 auth = getAuth(app);
 
-                // Authentication setup using the Canvas environment variables
+                // 1. Force the sign-in to complete synchronously (Anonymous Sign-in)
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
 
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
+                // 2. After sign-in, the user object is guaranteed to exist.
+                const user = auth.currentUser; 
+                
+                if (user) {
+                    userId = user.uid;
+                    document.getElementById('display-user-id').textContent = userId;
+                    
+                    // 3. Immediately set up the listener now that we have the definite userId
+                    setupProfileListener(); 
+                } else {
+                    console.error("Authentication failed: No user object found after sign-in attempt.");
+                }
+
+                // Keep the listener for potential future auth changes, but the main setup is done above.
+                onAuthStateChanged(auth, (latestUser) => {
+                    if (latestUser && latestUser.uid !== userId) {
+                        userId = latestUser.uid;
                         document.getElementById('display-user-id').textContent = userId;
-                        setupProfileListener();
-                    } else {
-                        console.log("User is signed out or auth is not ready.");
                     }
                 });
 
