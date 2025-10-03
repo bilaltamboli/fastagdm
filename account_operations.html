@@ -221,11 +221,23 @@
         const PROFILE_COLLECTION = 'user_data';
         const PROFILE_DOC_ID = 'user_profile';
 
-        // NOTE: These variables are automatically provided in the current coding environment.
-        // If deploying to a standard server, you MUST replace these with manual configuration.
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        // --- START: MANUAL CONFIGURATION FOR EXTERNAL SERVER ---
+// PASTE YOUR ENTIRE FIREBASE CONFIG OBJECT HERE (Do not change const name)
+const YOUR_FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCbsageWK7FXsuYE1XqRw8a5LdQi0u3myo",
+    authDomain: "first-3b0e2.firebaseapp.com",
+    projectId: "first-3b0e2",
+    storageBucket: "first-3b0e2.firebasestorage.app",
+    messagingSenderId: "167332139493",
+    appId: "1:167332139493:web:fb85490865854ed238df0c"
+};
+
+// Use the copied config directly to set up the app environment
+const appId = YOUR_FIREBASE_CONFIG.projectId; 
+const firebaseConfig = YOUR_FIREBASE_CONFIG;
+const initialAuthToken = null; // Forces the script to use anonymous sign-in
+
+// --- END: MANUAL CONFIGURATION FOR EXTERNAL SERVER ---
 
         // Utility elements
         const loadingOverlay = document.getElementById('loading-overlay');
