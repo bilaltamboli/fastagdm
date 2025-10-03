@@ -56,6 +56,15 @@
             justify-content: center;
             align-items: center;
         }
+        /* Specific style for disabled button to ensure visual feedback */
+        #add-account-btn.disabled-style {
+            background-color: #6366f1; /* Indigo 500 */
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        #add-account-btn:not(.disabled-style) {
+            background-color: #4f46e5; /* Indigo 600 */
+        }
     </style>
 </head>
 <body class="font-sans bg-gray-50 min-h-screen p-4 sm:p-8">
@@ -67,7 +76,7 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <p class="mt-2 text-indigo-600">Connecting to data...</p>
+            <p class="mt-2 text-indigo-600">Connecting to database and loading data...</p>
         </div>
     </div>
 
@@ -84,20 +93,20 @@
             <span class="font-medium">Error!</span> Something went wrong. Check console for details.
         </div>
         
-        <!-- === NEW: Total Summation Card === -->
+        <!-- Total Summation Card -->
         <div id="total-collection-card" class="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-8">
             <h3 class="text-lg font-semibold text-indigo-700">Total Today's Amount Collection</h3>
             <p id="total-amount-display" class="text-4xl font-extrabold text-indigo-900 mt-1">
-                ${formatCurrency(0)}
+                <!-- Initial display, updated by JS -->
+                ₹0.00
             </p>
         </div>
-        <!-- =============================== -->
 
         <!-- Section: Account List and Add Button -->
         <h2 class="text-2xl font-semibold text-gray-800 mb-4 flex justify-between items-center">
             My Accounts
-            <!-- FIX: Added ID, disabled by default, and modified classes for visual feedback -->
-            <button id="add-account-btn" onclick="openAccountModal('new')" class="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out opacity-50 cursor-not-allowed" disabled>
+            <!-- FIX: Disabled by default with distinct styling -->
+            <button id="add-account-btn" onclick="openAccountModal('new')" class="flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg text-white bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out disabled-style" disabled>
                 <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                     <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" />
                 </svg>
@@ -203,7 +212,7 @@
         // Global Firebase instances and state
         let app, db, auth;
         let currentAccounts = {}; 
-        let isDbReady = false; // NEW: Flag to track if DB is ready
+        let isDbReady = false; 
         
         // --- PUBLIC DATA CONFIGURATION ---
         const PUBLIC_COLLECTION = 'app_state';
@@ -221,8 +230,8 @@
         const errorBox = document.getElementById('error-box');
         const accountsContainer = document.getElementById('accounts-container');
         const noAccountsMessage = document.getElementById('no-accounts-message');
-        const totalAmountDisplay = document.getElementById('total-amount-display'); // NEW: Total display element
-        const addAccountBtn = document.getElementById('add-account-btn'); // NEW: Add button element
+        const totalAmountDisplay = document.getElementById('total-amount-display');
+        const addAccountBtn = document.getElementById('add-account-btn');
 
         const modalBackdrop = document.getElementById('account-modal-backdrop');
         const modalTitle = document.getElementById('modal-title');
@@ -246,10 +255,11 @@
             appContainer.classList.remove('hidden', 'opacity-0');
             appContainer.classList.add('opacity-100');
             
-            // NEW: Set flag and enable the Add button for a better UX
+            // Set flag and enable the Add button for a better UX
             isDbReady = true; 
             addAccountBtn.disabled = false;
-            addAccountBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            // Remove the custom disabled style and enable hover effect
+            addAccountBtn.classList.remove('disabled-style');
             addAccountBtn.classList.add('hover:bg-indigo-700'); 
         }
 
@@ -260,7 +270,7 @@
          */
         function formatCurrency(amount) {
             const num = parseFloat(amount);
-            if (isNaN(num) || num === null || num === undefined) return 'N/A';
+            if (isNaN(num) || num === null || num === undefined) return '₹0.00';
             return num.toLocaleString('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 });
         }
         window.formatCurrency = formatCurrency; // Expose to global scope for use in HTML template
@@ -303,7 +313,6 @@
          * Initializes Firebase (using Anonymous Auth for Firestore access) and sets up the listener.
          */
         async function initializeAppAndAuth() {
-            console.log('--- INITIALIZING APP AND AUTH ---');
             try {
                 if (!firebaseConfig.projectId) {
                     console.error("Firebase config is incomplete. Cannot initialize Firestore.");
@@ -316,7 +325,6 @@
                 auth = getAuth(app);
                 
                 await signInAnonymously(auth);
-                console.log('AUTH SUCCESS: Signed in anonymously.');
                 
                 setupPublicDataListener(); 
 
@@ -335,25 +343,19 @@
                 console.error("LISTENER FAIL: DB not ready.");
                 return;
             }
-            console.log('LISTENER: Setting up snapshot listener for public data.');
 
             const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
             onSnapshot(docRef, async (docSnap) => {
-                console.log('LISTENER EVENT: Snapshot received.');
-
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
-                    console.log(`LISTENER SUCCESS: Data updated. Found ${Object.keys(currentAccounts).length} accounts.`);
                 } else {
                     currentAccounts = {};
-                    modalDate.value = new Date().toISOString().substring(0, 10); 
-                    console.log("LISTENER INFO: No data document found. Starting fresh.");
                 }
 
                 renderAccounts(currentAccounts); 
-                updateTotalSummation(currentAccounts); // NEW: Update total
+                updateTotalSummation(currentAccounts);
                 hideLoading();
             }, (error) => {
                 console.error("Error listening to public data document:", error);
@@ -363,7 +365,7 @@
         }
         
         /**
-         * NEW: Calculates the sum of all 'todayAmountCollection' and updates the UI.
+         * Calculates the sum of all 'todayAmountCollection' and updates the UI.
          * @param {object} accountsMap Map of account objects keyed by ID.
          */
         function updateTotalSummation(accountsMap) {
@@ -386,7 +388,6 @@
          * @param {object} accountsMap Map of account objects keyed by ID.
          */
         function renderAccounts(accountsMap) {
-            console.log('--- STARTING RENDER ACCOUNTS ---');
             accountsContainer.innerHTML = '';
             const accountKeys = Object.keys(accountsMap);
 
@@ -467,9 +468,9 @@
          * Opens the modal for adding a new account or editing an existing one.
          */
         window.openAccountModal = function(id) {
-            // Defensive check (though the button should be disabled if not ready)
+            // Defense mechanism: Stop if not ready, although the button should be disabled
             if (!isDbReady) {
-                showNotification('error', "Database connection is still initializing. Please wait a moment.");
+                showNotification('error', "Database connection not ready. Please wait a moment.");
                 return;
             }
             
@@ -492,6 +493,8 @@
             
             if (id === 'new') {
                 modalTitle.textContent = 'Add New Account';
+                // Always ensure the date is current for new entries
+                modalDate.value = new Date().toISOString().substring(0, 10); 
             } else {
                 modalTitle.textContent = 'Edit Account';
                 const account = currentAccounts[id];
@@ -552,7 +555,7 @@
                 // Changeable/Operational Details
                 date: modalDate.value,
                 todayAmountCollection: amountCollection,
-                cashoutStatus: modalCashoutStatus.value || 'N/A', // Set default if empty
+                cashoutStatus: modalCashoutStatus.value || 'N/A', 
                 accountLoadedByUser: accountLoadedBy,
             };
 
@@ -602,13 +605,11 @@
             const docRef = doc(db, `artifacts/${appId}/public/data/${PUBLIC_COLLECTION}`, PUBLIC_DOC_ID);
 
             try {
-                // Prepare the base update object
                 let finalUpdate = {
                     ...updateData,
                     updatedAt: serverTimestamp(),
                 };
 
-                // Check for createdAt only on the initial write
                 const docSnap = await getDoc(docRef);
                 if (!docSnap.exists()) {
                     finalUpdate.createdAt = serverTimestamp();
