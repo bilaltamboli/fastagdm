@@ -17,6 +17,7 @@
                         'status-pending': '#f59e0b', /* Amber */
                         'status-completed': '#10b981', /* Emerald */
                         'status-admin': '#3b82f6', /* Blue */
+                        'running-account': '#f97316', /* Orange 500 */
                     }
                 }
             }
@@ -60,6 +61,12 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+        /* Style for the running account highlight */
+        .running-highlight {
+            border: 4px solid var(--colors-running-account, #f97316) !important; /* Default orange */
+            transform: scale(1.01);
+            box-shadow: 0 10px 20px rgba(249, 115, 22, 0.2);
+        }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen p-4 sm:p-8">
@@ -79,8 +86,8 @@
     <div id="app-container" class="max-w-7xl mx-auto bg-white card-shadow rounded-2xl p-6 sm:p-10 transform transition-all duration-500 opacity-0 hidden">
         <div class="flex justify-between items-center border-b pb-4 mb-6 border-indigo-100">
             <div>
-                <h1 class="text-4xl font-extrabold text-gray-900">Sabhi Details Yaha Milegi</h1>
-                <p class="text-gray-500 mt-1">Sarfaraj The Real King</p>
+                <h1 class="text-4xl font-extrabold text-gray-900">Operations Status Board</h1>
+                <p class="text-gray-500 mt-1">Real-time status updates, no login required.</p>
             </div>
             <button id="add-account-btn" onclick="openAccountModal('new')" class="flex items-center px-4 py-2 border border-transparent text-sm font-semibold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out shadow-md">
                 <svg class="h-5 w-5 mr-1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
@@ -94,10 +101,28 @@
         <div id="notification-box" class="hidden p-4 mb-4 rounded-xl text-sm border border-green-300 text-green-700 bg-green-50" role="alert"></div>
         <div id="error-box" class="hidden p-4 mb-4 rounded-xl text-sm border border-red-300 text-red-700 bg-red-50" role="alert"></div>
         
+        <!-- Filter Controls -->
+        <div class="mb-8 flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+            <!-- Today's Status Filter -->
+            <select id="filter-todays-status" onchange="handleFilterChange('todaysStatus', this.value)" class="status-select flex-grow">
+                <option value="All">All Today's Status</option>
+                <option value="Pending">Pending</option>
+                <option value="Completed">Completed</option>
+            </select>
+            <!-- Admin Filter -->
+            <select id="filter-admin-user" onchange="handleFilterChange('adminUser', this.value)" class="status-select flex-grow">
+                <option value="All">All Admins</option>
+                <option value="Bilal">Bilal</option>
+                <option value="Vishu">Vishu</option>
+                <!-- Add other admins here if needed -->
+            </select>
+        </div>
+
+        
         <!-- Account Cards Container -->
         <div id="accounts-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-4">
             <p id="no-accounts-message" class="col-span-full text-center text-gray-500 italic hidden p-10 bg-gray-50 rounded-xl border border-dashed border-gray-300">
-                No accounts found. Add the first one using the button above!
+                No accounts match the current filter criteria.
             </p>
         </div>
     </div>
@@ -153,13 +178,10 @@
     <!-- Firebase and Application Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        // Removed: getAuth, signInAnonymously
         import { getFirestore, doc, setDoc, onSnapshot, getDoc, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ----------------------------------------------------------------------------------
         // --- HARDCODED FIREBASE CONFIGURATION ---
-        // IMPORTANT: In a real-world scenario, you should use environment variables 
-        // or a secure build process for these keys, not hardcode them in public front-end code.
         const firebaseConfig = {
             apiKey: "AIzaSyCbsageWK7FXsuYE1XqRw8a5LdQi0u3myo",
             authDomain: "first-3b0e2.firebaseapp.com",
@@ -173,10 +195,16 @@
         // Global Firebase instances and state
         let db; 
         let currentAccounts = {}; 
+        let runningAccountId = null; // Global state for the running account ID
         let isDbReady = false; 
         
+        // Filter State (Search removed)
+        let filterState = {
+            todaysStatus: 'All',
+            adminUser: 'All'
+        };
+
         // --- PUBLIC DATA CONFIGURATION ---
-        // The projectId is used for the public data path construction.
         const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
         const PUBLIC_COLLECTION_PATH = 'app_state';
         const PUBLIC_DOC_ID = 'status_data'; 
@@ -241,7 +269,6 @@
 
         /**
          * Sets up the real-time listener for the public, shared data document.
-         * The path uses the structure: artifacts/{projectId}/public/data/app_state/status_data
          */
         function setupPublicDataListener(projectId) {
             // Document path: artifacts/{projectId}/public/data/app_state/status_data
@@ -253,11 +280,15 @@
                     const data = docSnap.data();
                     // Load or initialize accounts from the document
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
+                    // Capture the new runningAccountId
+                    runningAccountId = data.runningAccountId || null; 
                 } else {
                     // Initialize the document structure if it doesn't exist
                     currentAccounts = {};
+                    runningAccountId = null;
                 }
 
+                // Call renderAccounts to update the UI based on new data and current filters
                 renderAccounts(currentAccounts); 
                 hideLoading();
             }, (error) => {
@@ -289,28 +320,85 @@
             await updateFirestoreData({ accounts: updatedAccounts }, 'Status updated.');
         }
 
+        /**
+         * Toggles the 'Currently Running Account' status (Work Mode).
+         */
+        window.setRunningAccount = async function(accountId) {
+            if (!db || !isDbReady) {
+                return showNotification('error', "Database not ready. Please wait.");
+            }
+            
+            const isCurrentlyRunning = accountId === runningAccountId;
+            // Determine the new running ID: toggle off if already running, otherwise set the new ID
+            const newRunningId = isCurrentlyRunning ? null : accountId;
+
+            const accountName = currentAccounts[accountId]?.name || 'Account';
+            const successMsg = isCurrentlyRunning
+                ? 'Work Mode Off (Running account status cleared).' 
+                : `Work Mode On (Account "${accountName}" is now the Running Account).`;
+
+            try {
+                // Update the top-level document field 'runningAccountId'
+                await updateFirestoreData({ runningAccountId: newRunningId }, successMsg);
+            } catch (error) {
+                console.error("Error setting running account:", error);
+                showNotification('error', `Failed to set running account status: ${error.message}`);
+            }
+        }
 
         /**
-         * Renders the accounts list in the UI.
+         * Applies the current filter criteria to the accounts map.
+         * Returns an array of account keys (IDs) that match, sorted by name.
          */
-        function renderAccounts(accountsMap) {
-            accountsContainer.innerHTML = '';
+        function applyFilters(accountsMap) {
+            // Search removed
+            const statusFilter = filterState.todaysStatus;
+            const adminFilter = filterState.adminUser;
+
             const accountKeys = Object.keys(accountsMap);
+            
+            let filteredKeys = accountKeys.filter(id => {
+                const account = accountsMap[id];
 
-            if (accountKeys.length === 0) {
-                noAccountsMessage.classList.remove('hidden');
-                return;
-            }
-            noAccountsMessage.classList.add('hidden');
+                // 1. Status Filter
+                const matchesStatus = statusFilter === 'All' || account.todaysStatus === statusFilter;
+                if (!matchesStatus) return false;
 
+                // 2. Admin Filter
+                // Note: The adminUser can be an empty string if unassigned, which matches 'All'
+                const matchesAdmin = adminFilter === 'All' || account.adminUser === adminFilter;
+                if (!matchesAdmin) return false;
+
+                return true;
+            });
+            
             // Sort accounts alphabetically by name
-            const sortedKeys = accountKeys.sort((a, b) => {
+            filteredKeys.sort((a, b) => {
                 const nameA = accountsMap[a].name || '';
                 const nameB = accountsMap[b].name || '';
                 return nameA.localeCompare(nameB);
             });
 
-            sortedKeys.forEach(id => {
+            return filteredKeys;
+        }
+
+        /**
+         * Renders the accounts list in the UI, applying current filters.
+         */
+        function renderAccounts(accountsMap) {
+            accountsContainer.innerHTML = '';
+            
+            // Get the list of filtered and sorted account keys
+            const filteredAndSortedKeys = applyFilters(accountsMap);
+
+            if (filteredAndSortedKeys.length === 0) {
+                // Show the 'No accounts' message if the filtered list is empty
+                noAccountsMessage.classList.remove('hidden');
+                return;
+            }
+            noAccountsMessage.classList.add('hidden');
+
+            filteredAndSortedKeys.forEach(id => {
                 const account = accountsMap[id];
                 const card = document.createElement('div');
                 card.id = `account-${id}`;
@@ -320,12 +408,23 @@
                 const cashoutStatusColor = account.cashoutStatus === 'Completed' ? 'bg-status-completed' : 'bg-status-pending';
                 const adminAssignedColor = account.adminUser ? 'bg-status-admin' : 'bg-gray-400';
 
+                // Logic for running account highlight and button styling
+                const isRunning = id === runningAccountId;
+                const highlightClass = isRunning ? 'running-highlight border-4' : 'border-gray-200 border-2';
+                
+                const workModeText = isRunning ? 'Work Mode ON' : 'Work Mode OFF';
+                const workModeClass = isRunning 
+                    ? 'bg-status-completed text-white hover:bg-emerald-600 shadow-lg' // Green for ON
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-md'; // Gray for OFF
+                const runningButtonTitle = isRunning ? 'Clear Running Status' : 'Set as Currently Running';
 
-                card.className = 'bg-white border border-gray-200 rounded-xl shadow-lg p-5 hover:shadow-xl transition duration-300 space-y-4 fade-in';
+
+                card.className = `bg-white rounded-xl shadow-lg p-5 hover:shadow-xl transition duration-300 space-y-4 fade-in ${highlightClass}`;
                 card.innerHTML = `
-                    <div class="flex justify-between items-start border-b border-indigo-100 pb-3">
+                    <!-- HEADER: Name, Edit/Delete Buttons -->
+                    <div class="flex justify-between items-start pb-3">
                         <h3 class="text-xl font-bold text-gray-800 truncate pr-2">${account.name || 'Untitled Account'}</h3>
-                        <div class="flex space-x-2">
+                        <div class="flex space-x-1">
                             <button onclick="openAccountModal('${id}')" class="text-indigo-500 hover:text-indigo-700 p-1 rounded-full hover:bg-indigo-50 transition duration-150" title="Edit Details">
                                 <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
                             </button>
@@ -334,9 +433,14 @@
                             </button>
                         </div>
                     </div>
+                    
+                    <!-- WORK MODE BUTTON -->
+                    <button onclick="setRunningAccount('${id}')" class="w-full text-sm font-semibold py-2 px-4 rounded-xl transition duration-150 transform active:scale-98 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 ${workModeClass}" title="${runningButtonTitle}">
+                        ${workModeText}
+                    </button>
 
                     <!-- FIXED FIELDS DISPLAY -->
-                    <div class="space-y-2 text-sm text-gray-600 border-b pb-4 border-gray-100">
+                    <div class="space-y-2 text-sm text-gray-600 border-t border-b py-4 border-gray-100">
                         <div><span class="font-medium text-gray-500">FASTAG ID:</span> <span class="font-semibold text-gray-800 break-words">${account.fastagId || 'N/A'}</span></div>
                         <div><span class="font-medium text-gray-500">Vehicle No:</span> <span class="font-semibold text-gray-800 break-words">${account.vehicleNumber || 'N/A'}</span></div>
                         <div><span class="font-medium text-gray-500">UPI ID:</span> <span class="font-semibold text-gray-800 break-words">${account.airtelUpiId || 'N/A'}</span></div>
@@ -420,6 +524,17 @@
             }
         }
         
+        // --- Filter Handler ---
+        
+        /**
+         * Updates the filter state and triggers a re-render.
+         */
+        window.handleFilterChange = function(type, value) {
+            // Note: the admin dropdown uses value="" for "Select Admin" which corresponds to an empty string in data.
+            filterState[type] = (type === 'adminUser' && value === "") ? 'All' : value;
+            renderAccounts(currentAccounts);
+        }
+
         // --- Modal Logic ---
 
         window.openAccountModal = function(id) {
@@ -519,7 +634,13 @@
                 const updatedAccounts = { ...currentAccounts };
                 delete updatedAccounts[id];
 
-                await updateFirestoreData({ accounts: updatedAccounts }, 'Account Deleted');
+                // If the account being deleted is the running account, clear the runningAccountId field too
+                const updates = { accounts: updatedAccounts };
+                if (id === runningAccountId) {
+                    updates.runningAccountId = null;
+                }
+
+                await updateFirestoreData(updates, 'Account Deleted');
             }
         }
         
