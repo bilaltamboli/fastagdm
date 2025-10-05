@@ -63,7 +63,8 @@
         }
         /* Style for the running account highlight */
         .running-highlight {
-            border: 4px solid var(--colors-running-account, #f97316) !important; /* Default orange */
+            /* Now based on running-account color defined in tailwind config */
+            border: 4px solid var(--colors-running-account, #f97316) !important; 
             transform: scale(1.01);
             box-shadow: 0 10px 20px rgba(249, 115, 22, 0.2);
         }
@@ -112,7 +113,7 @@
             <!-- Admin Filter -->
             <select id="filter-admin-user" onchange="handleFilterChange('adminUser', this.value)" class="status-select flex-grow">
                 <option value="All">All Admins</option>
-                <option value="">Unassigned</option> <!-- New filter option for unassigned accounts -->
+                <option value="">Unassigned</option> <!-- Filter by unassigned accounts -->
                 <option value="Bilal">Bilal</option>
                 <option value="Vishu">Vishu</option>
                 <option value="Ravi">Ravi</option>
@@ -197,7 +198,8 @@
         // Global Firebase instances and state
         let db; 
         let currentAccounts = {}; 
-        let runningAccountId = null; // Global state for the running account ID
+        // CHANGED: Now an array to hold multiple running account IDs
+        let runningAccountIds = []; 
         let isDbReady = false; 
         
         // Filter State (Search removed)
@@ -282,12 +284,12 @@
                     const data = docSnap.data();
                     // Load or initialize accounts from the document
                     currentAccounts = data.accounts && typeof data.accounts === 'object' ? data.accounts : {};
-                    // Capture the new runningAccountId
-                    runningAccountId = data.runningAccountId || null; 
+                    // CHANGED: Capture the new runningAccountIds array (defaults to empty array)
+                    runningAccountIds = data.runningAccountIds && Array.isArray(data.runningAccountIds) ? data.runningAccountIds : []; 
                 } else {
                     // Initialize the document structure if it doesn't exist
                     currentAccounts = {};
-                    runningAccountId = null;
+                    runningAccountIds = [];
                 }
 
                 // Call renderAccounts to update the UI based on new data and current filters
@@ -310,7 +312,7 @@
             }
             
             // Ensure empty string is saved for unassigned admin
-            const finalValue = (field === 'adminUser' && value === '— Unassigned —') ? '' : value;
+            const finalValue = (field === 'adminUser' && value === '') ? '' : value;
 
             const updatedAccount = {
                 ...currentAccounts[accountId],
@@ -326,28 +328,36 @@
         }
 
         /**
-         * Toggles the 'Currently Running Account' status (Work Mode).
+         * CHANGED: Toggles the given account ID in the runningAccountIds array.
          */
         window.setRunningAccount = async function(accountId) {
             if (!db || !isDbReady) {
                 return showNotification('error', "Database not ready. Please wait.");
             }
             
-            const isCurrentlyRunning = accountId === runningAccountId;
-            // Determine the new running ID: toggle off if already running, otherwise set the new ID
-            const newRunningId = isCurrentlyRunning ? null : accountId;
-
+            // Check if the ID is currently in the array
+            const isCurrentlyRunning = runningAccountIds.includes(accountId);
             const accountName = currentAccounts[accountId]?.name || 'Account';
-            const successMsg = isCurrentlyRunning
-                ? 'Work Mode Off (Running account status cleared).' 
-                : `Work Mode On (Account "${accountName}" is now the Running Account).`;
+            
+            let newRunningIds;
+            let successMsg;
+
+            if (isCurrentlyRunning) {
+                // Remove ID (Work Mode Off)
+                newRunningIds = runningAccountIds.filter(id => id !== accountId);
+                successMsg = `Work Mode OFF for "${accountName}".`;
+            } else {
+                // Add ID (Work Mode On)
+                newRunningIds = [...runningAccountIds, accountId];
+                successMsg = `Work Mode ON for "${accountName}".`;
+            }
 
             try {
-                // Update the top-level document field 'runningAccountId'
-                await updateFirestoreData({ runningAccountId: newRunningId }, successMsg);
+                // Update the top-level document field 'runningAccountIds' (plural)
+                await updateFirestoreData({ runningAccountIds: newRunningIds }, successMsg);
             } catch (error) {
                 console.error("Error setting running account:", error);
-                showNotification('error', `Failed to set running account status: ${error.message}`);
+                showNotification('error', `Failed to update Work Mode status: ${error.message}`);
             }
         }
 
@@ -357,7 +367,7 @@
          */
         function applyFilters(accountsMap) {
             const statusFilter = filterState.todaysStatus;
-            const adminFilter = filterState.adminUser; // Can be 'All', 'Bilal', 'Vishu', 'Ravi', or '' (for unassigned)
+            const adminFilter = filterState.adminUser; 
 
             const accountKeys = Object.keys(accountsMap);
             
@@ -416,15 +426,15 @@
                 const assignedAdmin = account.adminUser || '';
                 const adminAssignedColor = assignedAdmin ? 'bg-status-admin' : 'bg-gray-400';
 
-                // Logic for running account highlight and button styling
-                const isRunning = id === runningAccountId;
+                // CHANGED: Check if the ID is included in the array of running accounts
+                const isRunning = runningAccountIds.includes(id);
                 const highlightClass = isRunning ? 'running-highlight border-4' : 'border-gray-200 border-2';
                 
                 const workModeText = isRunning ? 'Work Mode ON' : 'Work Mode OFF';
                 const workModeClass = isRunning 
                     ? 'bg-status-completed text-white hover:bg-emerald-600 shadow-lg' // Green for ON
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-md'; // Gray for OFF
-                const runningButtonTitle = isRunning ? 'Clear Running Status' : 'Set as Currently Running';
+                const runningButtonTitle = isRunning ? 'Turn Work Mode OFF' : 'Turn Work Mode ON';
 
 
                 card.className = `bg-white rounded-xl shadow-lg p-5 hover:shadow-xl transition duration-300 space-y-4 fade-in ${highlightClass}`;
@@ -490,7 +500,7 @@
                             </label>
                             <select id="admin-${id}" class="status-select w-full" 
                                 onchange="handleStatusUpdate('${id}', 'adminUser', this.value)">
-                                <!-- Added Unassigned option with value="" which clears the adminUser field in Firestore -->
+                                <!-- Unassigned option with value="" which clears the adminUser field in Firestore -->
                                 <option value="" ${assignedAdmin === '' ? 'selected' : ''}>— Unassign Admin —</option>
                                 <option value="Bilal" ${assignedAdmin === 'Bilal' ? 'selected' : ''}>Bilal</option>
                                 <option value="Vishu" ${assignedAdmin === 'Vishu' ? 'selected' : ''}>Vishu</option>
@@ -540,7 +550,6 @@
          * Updates the filter state and triggers a re-render.
          */
         window.handleFilterChange = function(type, value) {
-            // Set the filter state directly based on the selected value ('All', 'Bilal', or '' for Unassigned)
             filterState[type] = value;
             renderAccounts(currentAccounts);
         }
@@ -634,6 +643,9 @@
             closeAccountModal();
         }
 
+        /**
+         * CHANGED: Ensures the account ID is removed from runningAccountIds if it was active.
+         */
         window.deleteAccount = async function(id) {
             if (!isDbReady) return showNotification('error', "Database not ready. Please wait.");
             
@@ -644,10 +656,12 @@
                 const updatedAccounts = { ...currentAccounts };
                 delete updatedAccounts[id];
 
-                // If the account being deleted is the running account, clear the runningAccountId field too
                 const updates = { accounts: updatedAccounts };
-                if (id === runningAccountId) {
-                    updates.runningAccountId = null;
+                
+                // If the account being deleted is a running account, remove its ID from the array
+                if (runningAccountIds.includes(id)) {
+                    const filteredRunningIds = runningAccountIds.filter(runningId => runningId !== id);
+                    updates.runningAccountIds = filteredRunningIds;
                 }
 
                 await updateFirestoreData(updates, 'Account Deleted');
