@@ -112,8 +112,10 @@
             <!-- Admin Filter -->
             <select id="filter-admin-user" onchange="handleFilterChange('adminUser', this.value)" class="status-select flex-grow">
                 <option value="All">All Admins</option>
+                <option value="">Unassigned</option> <!-- New filter option for unassigned accounts -->
                 <option value="Bilal">Bilal</option>
                 <option value="Vishu">Vishu</option>
+                <option value="Ravi">Ravi</option>
                 <!-- Add other admins here if needed -->
             </select>
         </div>
@@ -201,7 +203,7 @@
         // Filter State (Search removed)
         let filterState = {
             todaysStatus: 'All',
-            adminUser: 'All'
+            adminUser: 'All' // 'All' for all admins/unassigned. '' for only unassigned.
         };
 
         // --- PUBLIC DATA CONFIGURATION ---
@@ -307,9 +309,12 @@
                 return;
             }
             
+            // Ensure empty string is saved for unassigned admin
+            const finalValue = (field === 'adminUser' && value === '— Unassigned —') ? '' : value;
+
             const updatedAccount = {
                 ...currentAccounts[accountId],
-                [field]: value
+                [field]: finalValue
             };
 
             const updatedAccounts = {
@@ -351,9 +356,8 @@
          * Returns an array of account keys (IDs) that match, sorted by name.
          */
         function applyFilters(accountsMap) {
-            // Search removed
             const statusFilter = filterState.todaysStatus;
-            const adminFilter = filterState.adminUser;
+            const adminFilter = filterState.adminUser; // Can be 'All', 'Bilal', 'Vishu', 'Ravi', or '' (for unassigned)
 
             const accountKeys = Object.keys(accountsMap);
             
@@ -365,8 +369,9 @@
                 if (!matchesStatus) return false;
 
                 // 2. Admin Filter
-                // Note: The adminUser can be an empty string if unassigned, which matches 'All'
-                const matchesAdmin = adminFilter === 'All' || account.adminUser === adminFilter;
+                // If filter is 'All', match everything. 
+                // Otherwise, match the adminUser field exactly (handles "" for unassigned too).
+                const matchesAdmin = adminFilter === 'All' || (account.adminUser || '') === adminFilter;
                 if (!matchesAdmin) return false;
 
                 return true;
@@ -406,7 +411,10 @@
                 // Determine color for the status pill based on current status
                 const todaysStatusColor = account.todaysStatus === 'Completed' ? 'bg-status-completed' : 'bg-status-pending';
                 const cashoutStatusColor = account.cashoutStatus === 'Completed' ? 'bg-status-completed' : 'bg-status-pending';
-                const adminAssignedColor = account.adminUser ? 'bg-status-admin' : 'bg-gray-400';
+                
+                // Use empty string check for admin assigned status
+                const assignedAdmin = account.adminUser || '';
+                const adminAssignedColor = assignedAdmin ? 'bg-status-admin' : 'bg-gray-400';
 
                 // Logic for running account highlight and button styling
                 const isRunning = id === runningAccountId;
@@ -478,13 +486,15 @@
                         <div>
                             <label class="block text-xs font-medium text-gray-500 mb-1 flex justify-between items-center">
                                 Assigned Admin
-                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold text-white ${adminAssignedColor}">${account.adminUser || 'Unassigned'}</span>
+                                <span class="px-2 py-0.5 rounded-full text-xs font-semibold text-white ${adminAssignedColor}">${assignedAdmin || 'Unassigned'}</span>
                             </label>
                             <select id="admin-${id}" class="status-select w-full" 
                                 onchange="handleStatusUpdate('${id}', 'adminUser', this.value)">
-                                <option value="" ${account.adminUser === '' || account.adminUser === undefined ? 'selected' : ''} disabled>Select Admin</option>
-                                <option value="Bilal" ${account.adminUser === 'Bilal' ? 'selected' : ''}>Bilal</option>
-                                <option value="Vishu" ${account.adminUser === 'Vishu' ? 'selected' : ''}>Vishu</option>
+                                <!-- Added Unassigned option with value="" which clears the adminUser field in Firestore -->
+                                <option value="" ${assignedAdmin === '' ? 'selected' : ''}>— Unassign Admin —</option>
+                                <option value="Bilal" ${assignedAdmin === 'Bilal' ? 'selected' : ''}>Bilal</option>
+                                <option value="Vishu" ${assignedAdmin === 'Vishu' ? 'selected' : ''}>Vishu</option>
+                                <option value="Ravi" ${assignedAdmin === 'Ravi' ? 'selected' : ''}>Ravi</option>
                             </select>
                         </div>
                     </div>
@@ -530,8 +540,8 @@
          * Updates the filter state and triggers a re-render.
          */
         window.handleFilterChange = function(type, value) {
-            // Note: the admin dropdown uses value="" for "Select Admin" which corresponds to an empty string in data.
-            filterState[type] = (type === 'adminUser' && value === "") ? 'All' : value;
+            // Set the filter state directly based on the selected value ('All', 'Bilal', or '' for Unassigned)
+            filterState[type] = value;
             renderAccounts(currentAccounts);
         }
 
@@ -599,7 +609,7 @@
             const baseAccountData = currentAccounts[accountId] || {
                 todaysStatus: 'Pending',
                 cashoutStatus: 'Pending',
-                adminUser: '', 
+                adminUser: '', // Default to unassigned
             };
 
             const newFixedData = {
